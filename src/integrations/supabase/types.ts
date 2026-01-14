@@ -14,6 +14,75 @@ export type Database = {
   }
   public: {
     Tables: {
+      alerts: {
+        Row: {
+          created_at: string
+          id: string
+          message: string
+          metadata: Json | null
+          resolved: boolean | null
+          type: string
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          message: string
+          metadata?: Json | null
+          resolved?: boolean | null
+          type: string
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          message?: string
+          metadata?: Json | null
+          resolved?: boolean | null
+          type?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
+      api_connections: {
+        Row: {
+          access_token: string | null
+          api_key: string | null
+          api_secret: string | null
+          created_at: string
+          id: string
+          is_active: boolean | null
+          last_sync_at: string | null
+          platform: string
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          access_token?: string | null
+          api_key?: string | null
+          api_secret?: string | null
+          created_at?: string
+          id?: string
+          is_active?: boolean | null
+          last_sync_at?: string | null
+          platform: string
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          access_token?: string | null
+          api_key?: string | null
+          api_secret?: string | null
+          created_at?: string
+          id?: string
+          is_active?: boolean | null
+          last_sync_at?: string | null
+          platform?: string
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
       authorized_emails: {
         Row: {
           created_at: string
@@ -65,6 +134,72 @@ export type Database = {
         }
         Relationships: []
       }
+      export_history: {
+        Row: {
+          created_at: string
+          export_type: string
+          file_name: string
+          format: string
+          id: string
+          period_end: string | null
+          period_start: string | null
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          export_type: string
+          file_name: string
+          format: string
+          id?: string
+          period_end?: string | null
+          period_start?: string | null
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          export_type?: string
+          file_name?: string
+          format?: string
+          id?: string
+          period_end?: string | null
+          period_start?: string | null
+          user_id?: string
+        }
+        Relationships: []
+      }
+      import_history: {
+        Row: {
+          created_at: string
+          error_details: Json | null
+          file_name: string
+          id: string
+          rows_failed: number | null
+          rows_imported: number | null
+          status: string | null
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          error_details?: Json | null
+          file_name: string
+          id?: string
+          rows_failed?: number | null
+          rows_imported?: number | null
+          status?: string | null
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          error_details?: Json | null
+          file_name?: string
+          id?: string
+          rows_failed?: number | null
+          rows_imported?: number | null
+          status?: string | null
+          user_id?: string
+        }
+        Relationships: []
+      }
       profiles: {
         Row: {
           avatar_url: string | null
@@ -101,7 +236,12 @@ export type Database = {
           description: string
           id: string
           notes: string | null
+          origin: string | null
+          product_cost: number | null
+          profit: number | null
           source: string | null
+          subcategory: string | null
+          tax_amount: number | null
           type: string
           updated_at: string
           user_id: string
@@ -114,7 +254,12 @@ export type Database = {
           description: string
           id?: string
           notes?: string | null
+          origin?: string | null
+          product_cost?: number | null
+          profit?: number | null
           source?: string | null
+          subcategory?: string | null
+          tax_amount?: number | null
           type: string
           updated_at?: string
           user_id: string
@@ -127,7 +272,12 @@ export type Database = {
           description?: string
           id?: string
           notes?: string | null
+          origin?: string | null
+          product_cost?: number | null
+          profit?: number | null
           source?: string | null
+          subcategory?: string | null
+          tax_amount?: number | null
           type?: string
           updated_at?: string
           user_id?: string
@@ -141,6 +291,36 @@ export type Database = {
             referencedColumns: ["id"]
           },
         ]
+      }
+      user_settings: {
+        Row: {
+          created_at: string
+          id: string
+          max_expense_goal: number | null
+          monthly_revenue_goal: number | null
+          sync_frequency: string | null
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          max_expense_goal?: number | null
+          monthly_revenue_goal?: number | null
+          sync_frequency?: string | null
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          max_expense_goal?: number | null
+          monthly_revenue_goal?: number | null
+          sync_frequency?: string | null
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: []
       }
     }
     Views: {

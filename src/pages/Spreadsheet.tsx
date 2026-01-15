@@ -185,7 +185,7 @@ export default function Spreadsheet() {
       if (error) throw error;
 
       // Create edit alert
-      await createAlert('edit', `Transação editada: ${transaction.description}`, {
+      await createAlert('transaction_edited', `Transação editada: ${transaction.description}`, {
         transactionId: editingCell.id,
         field: editingCell.field,
         oldValue,
@@ -238,7 +238,7 @@ export default function Spreadsheet() {
 
       if (error) throw error;
 
-      await createAlert('create', 'Nova transação criada via planilha', {
+      await createAlert('transaction_created', 'Nova transação criada via planilha', {
         transactionId: data.id,
       });
 
@@ -271,7 +271,7 @@ export default function Spreadsheet() {
 
       if (error) throw error;
 
-      await createAlert('delete', `Transação excluída: ${transaction?.description}`, {
+      await createAlert('transaction_deleted', `Transação excluída: ${transaction?.description}`, {
         transactionId: deleteId,
         deletedData: transaction,
       });

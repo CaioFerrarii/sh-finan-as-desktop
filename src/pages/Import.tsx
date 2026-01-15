@@ -285,7 +285,7 @@ export default function Import() {
           const { isDuplicate, duplicateId } = await checkDuplicates(categoryId, amount, date);
           
           if (isDuplicate) {
-            await createAlert('duplicate', `Possível duplicidade detectada na importação`, {
+            await createAlert('duplicate_detected', `Possível duplicidade detectada na importação`, {
               originalId: duplicateId,
               duplicateDescription: description,
               amount,
@@ -333,7 +333,7 @@ export default function Import() {
         });
 
       // Create import alert
-      await createAlert('import', `Importação concluída: ${file.name}`, {
+      await createAlert('import_completed', `Importação concluída: ${file.name}`, {
         fileName: file.name,
         rowsImported,
         rowsFailed,

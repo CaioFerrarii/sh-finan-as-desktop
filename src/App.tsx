@@ -15,6 +15,8 @@ import Reports from "./pages/Reports";
 import Import from "./pages/Import";
 import Export from "./pages/Export";
 import Settings from "./pages/Settings";
+import Spreadsheet from "./pages/Spreadsheet";
+import Alerts from "./pages/Alerts";
 import NotFound from "./pages/NotFound";
 
 const queryClient = new QueryClient();
@@ -39,6 +41,8 @@ const App = () => (
                 <Route path="/reports" element={<Reports />} />
                 <Route path="/import" element={<Import />} />
                 <Route path="/export" element={<Export />} />
+                <Route path="/spreadsheet" element={<Spreadsheet />} />
+                <Route path="/alerts" element={<Alerts />} />
                 <Route path="/settings" element={<Settings />} />
               </Route>
             </Route>

@@ -15,15 +15,19 @@ import {
   Upload,
   Download,
   Menu,
+  Table,
+  Bell,
 } from 'lucide-react';
 
 const navigation = [
   { name: 'Dashboard', href: '/dashboard', icon: LayoutDashboard },
   { name: 'Transações', href: '/transactions', icon: Receipt },
+  { name: 'Planilha', href: '/spreadsheet', icon: Table },
   { name: 'Categorias', href: '/categories', icon: Tags },
   { name: 'Relatórios', href: '/reports', icon: FileText },
   { name: 'Importar', href: '/import', icon: Upload },
   { name: 'Exportar', href: '/export', icon: Download },
+  { name: 'Alertas', href: '/alerts', icon: Bell },
   { name: 'Configurações', href: '/settings', icon: Settings },
 ];
 

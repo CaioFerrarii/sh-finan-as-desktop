@@ -22,7 +22,7 @@ import { useToast } from '@/hooks/use-toast';
 import { useAuth } from '@/hooks/useAuth';
 import { supabase } from '@/integrations/supabase/client';
 import { useAlerts } from '@/hooks/useAlerts';
-import * as XLSX from 'xlsx';
+import ExcelJS from 'exceljs';
 
 interface ColumnMapping {
   date: string;
@@ -31,16 +31,6 @@ interface ColumnMapping {
   category: string;
   taxAmount: string;
   productCost: string;
-}
-
-interface ParsedRow {
-  date: string;
-  description: string;
-  amount: number;
-  type: 'income' | 'expense';
-  category?: string;
-  taxAmount?: number;
-  productCost?: number;
 }
 
 interface ImportHistoryItem {
@@ -116,11 +106,38 @@ export default function Import() {
 
   const parseFile = async (file: File) => {
     try {
-      const data = await file.arrayBuffer();
-      const workbook = XLSX.read(data, { type: 'array' });
-      const sheetName = workbook.SheetNames[0];
-      const worksheet = workbook.Sheets[sheetName];
-      const jsonData = XLSX.utils.sheet_to_json(worksheet, { header: 1 });
+      const workbook = new ExcelJS.Workbook();
+      const arrayBuffer = await file.arrayBuffer();
+      
+      if (file.name.endsWith('.csv')) {
+        // For CSV, read as text and parse manually
+        const text = await file.text();
+        const lines = text.split('\n').filter(line => line.trim());
+        const worksheet = workbook.addWorksheet('Sheet1');
+        lines.forEach(line => {
+          const values = line.split(',').map(v => v.trim().replace(/^"|"$/g, ''));
+          worksheet.addRow(values);
+        });
+      } else {
+        await workbook.xlsx.load(arrayBuffer);
+      }
+
+      const worksheet = workbook.worksheets[0];
+      if (!worksheet) {
+        toast({
+          title: 'Arquivo vazio',
+          description: 'O arquivo não contém planilhas.',
+          variant: 'destructive',
+        });
+        return;
+      }
+
+      const jsonData: any[][] = [];
+      worksheet.eachRow((row, rowNumber) => {
+        const rowValues = row.values as any[];
+        // ExcelJS row.values starts at index 1, shift to index 0
+        jsonData.push(rowValues.slice(1));
+      });
 
       if (jsonData.length < 2) {
         toast({
@@ -131,7 +148,7 @@ export default function Import() {
         return;
       }
 
-      const headerRow = jsonData[0] as string[];
+      const headerRow = jsonData[0].map(h => String(h || ''));
       const dataRows = jsonData.slice(1, 6); // Preview first 5 rows
 
       setHeaders(headerRow);
@@ -188,10 +205,9 @@ export default function Import() {
   const parseDate = (value: any): string => {
     if (!value) return new Date().toISOString().split('T')[0];
 
-    // Handle Excel serial date numbers
-    if (typeof value === 'number') {
-      const date = XLSX.SSF.parse_date_code(value);
-      return `${date.y}-${String(date.m).padStart(2, '0')}-${String(date.d).padStart(2, '0')}`;
+    // Handle Date objects (ExcelJS converts Excel dates to Date objects)
+    if (value instanceof Date) {
+      return value.toISOString().split('T')[0];
     }
 
     // Handle string dates
@@ -221,14 +237,33 @@ export default function Import() {
     const errors: string[] = [];
 
     try {
-      const data = await file.arrayBuffer();
-      const workbook = XLSX.read(data, { type: 'array' });
-      const sheetName = workbook.SheetNames[0];
-      const worksheet = workbook.Sheets[sheetName];
-      const jsonData = XLSX.utils.sheet_to_json(worksheet, { header: 1 });
+      const workbook = new ExcelJS.Workbook();
+      const arrayBuffer = await file.arrayBuffer();
       
-      const headerRow = jsonData[0] as string[];
-      const dataRows = jsonData.slice(1) as any[][];
+      if (file.name.endsWith('.csv')) {
+        // For CSV, read as text and parse manually
+        const text = await file.text();
+        const lines = text.split('\n').filter(line => line.trim());
+        const worksheet = workbook.addWorksheet('Sheet1');
+        lines.forEach(line => {
+          const values = line.split(',').map(v => v.trim().replace(/^"|"$/g, ''));
+          worksheet.addRow(values);
+        });
+      } else {
+        await workbook.xlsx.load(arrayBuffer);
+      }
+
+      const worksheet = workbook.worksheets[0];
+      if (!worksheet) throw new Error('No worksheet found');
+
+      const jsonData: any[][] = [];
+      worksheet.eachRow((row) => {
+        const rowValues = row.values as any[];
+        jsonData.push(rowValues.slice(1));
+      });
+      
+      const headerRow = jsonData[0].map(h => String(h || ''));
+      const dataRows = jsonData.slice(1);
 
       // Get column indices
       const dateIdx = headerRow.indexOf(mapping.date);
@@ -510,7 +545,6 @@ export default function Import() {
                   ))}
                 </SelectContent>
               </Select>
-              <p className="text-xs text-muted-foreground">Positivo = receita, negativo = despesa</p>
             </div>
 
             <div className="space-y-2">
@@ -529,7 +563,7 @@ export default function Import() {
             </div>
 
             <div className="space-y-2">
-              <Label>Imposto (opcional)</Label>
+              <Label>Impostos (opcional)</Label>
               <Select value={mapping.taxAmount} onValueChange={(v) => handleMappingChange('taxAmount', v)}>
                 <SelectTrigger>
                   <SelectValue placeholder="Selecione a coluna" />
@@ -560,29 +594,33 @@ export default function Import() {
           </div>
 
           {/* Preview Table */}
-          <div className="overflow-x-auto">
-            <p className="text-sm text-muted-foreground mb-2">Pré-visualização (5 primeiras linhas):</p>
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  {headers.map((h, i) => (
-                    <TableHead key={i}>{h}</TableHead>
-                  ))}
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {previewData.map((row, i) => (
-                  <TableRow key={i}>
-                    {headers.map((_, j) => (
-                      <TableCell key={j}>{row[j] || '-'}</TableCell>
+          <div className="space-y-2">
+            <Label>Preview dos Dados</Label>
+            <div className="border rounded-lg overflow-x-auto">
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    {headers.map((h, i) => (
+                      <TableHead key={i} className="whitespace-nowrap">{h}</TableHead>
                     ))}
                   </TableRow>
-                ))}
-              </TableBody>
-            </Table>
+                </TableHeader>
+                <TableBody>
+                  {previewData.map((row, i) => (
+                    <TableRow key={i}>
+                      {headers.map((_, j) => (
+                        <TableCell key={j} className="whitespace-nowrap">
+                          {row[j] !== undefined && row[j] !== null ? String(row[j]) : '-'}
+                        </TableCell>
+                      ))}
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+            </div>
           </div>
 
-          <div className="flex justify-end gap-2">
+          <div className="flex gap-4">
             <Button variant="outline" onClick={resetImport}>
               Cancelar
             </Button>
@@ -593,49 +631,58 @@ export default function Import() {
         </Card>
       )}
 
-      {/* Preview/Confirm Step */}
+      {/* Preview/Import Step */}
       {step === 'preview' && (
         <Card className="p-6 space-y-6">
           <div className="flex items-center gap-3">
-            <CheckCircle className="h-6 w-6 text-primary" />
+            <CheckCircle className="h-6 w-6 text-green-500" />
             <div>
               <p className="font-medium">Pronto para importar</p>
               <p className="text-sm text-muted-foreground">
-                {previewData.length} linhas serão processadas
+                {previewData.length} registros serão processados
               </p>
             </div>
           </div>
 
-          <div className="bg-muted/50 p-4 rounded-lg space-y-2">
+          <div className="bg-muted/50 rounded-lg p-4 space-y-2">
             <p className="font-medium">Mapeamento configurado:</p>
-            <ul className="text-sm text-muted-foreground space-y-1">
+            <ul className="text-sm space-y-1 text-muted-foreground">
               <li>• Data: <span className="text-foreground">{mapping.date}</span></li>
               <li>• Descrição: <span className="text-foreground">{mapping.description}</span></li>
               <li>• Valor: <span className="text-foreground">{mapping.amount}</span></li>
               {mapping.category && <li>• Categoria: <span className="text-foreground">{mapping.category}</span></li>}
-              {mapping.taxAmount && <li>• Imposto: <span className="text-foreground">{mapping.taxAmount}</span></li>}
+              {mapping.taxAmount && <li>• Impostos: <span className="text-foreground">{mapping.taxAmount}</span></li>}
               {mapping.productCost && <li>• Custo: <span className="text-foreground">{mapping.productCost}</span></li>}
             </ul>
           </div>
 
-          <div className="flex items-start gap-2 p-4 bg-warning/10 rounded-lg">
-            <AlertCircle className="h-5 w-5 text-warning mt-0.5" />
-            <div className="text-sm">
-              <p className="font-medium text-warning">Atenção</p>
-              <p className="text-muted-foreground">
-                Duplicidades serão detectadas e alertas serão criados automaticamente.
-                Novas categorias serão criadas se não existirem.
+          <div className="bg-yellow-500/10 border border-yellow-500/20 rounded-lg p-4 flex items-start gap-3">
+            <AlertCircle className="h-5 w-5 text-yellow-500 mt-0.5" />
+            <div>
+              <p className="font-medium text-yellow-700 dark:text-yellow-400">Atenção</p>
+              <p className="text-sm text-muted-foreground">
+                O sistema irá verificar duplicidades e criar alertas caso encontre transações semelhantes.
+                Categorias não existentes serão criadas automaticamente.
               </p>
             </div>
           </div>
 
-          <div className="flex justify-end gap-2">
+          <div className="flex gap-4">
             <Button variant="outline" onClick={() => setStep('mapping')}>
               Voltar
             </Button>
             <Button onClick={handleImport} disabled={importing}>
-              {importing && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}
-              {importing ? 'Importando...' : 'Importar Dados'}
+              {importing ? (
+                <>
+                  <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                  Importando...
+                </>
+              ) : (
+                <>
+                  <Upload className="h-4 w-4 mr-2" />
+                  Importar Dados
+                </>
+              )}
             </Button>
           </div>
         </Card>
@@ -644,39 +691,36 @@ export default function Import() {
       {/* Import History */}
       {importHistory.length > 0 && (
         <Card className="p-6">
-          <h2 className="text-lg font-semibold mb-4">Histórico de Importações</h2>
-          <Table>
-            <TableHeader>
-              <TableRow>
-                <TableHead>Arquivo</TableHead>
-                <TableHead>Importados</TableHead>
-                <TableHead>Erros</TableHead>
-                <TableHead>Status</TableHead>
-                <TableHead>Data</TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {importHistory.map((item) => (
-                <TableRow key={item.id}>
-                  <TableCell className="font-medium">{item.file_name}</TableCell>
-                  <TableCell className="text-primary">{item.rows_imported}</TableCell>
-                  <TableCell className="text-destructive">{item.rows_failed || 0}</TableCell>
-                  <TableCell>
-                    <span className={`px-2 py-1 rounded-full text-xs ${
-                      item.status === 'success' 
-                        ? 'bg-primary/10 text-primary' 
-                        : 'bg-warning/10 text-warning'
-                    }`}>
-                      {item.status === 'success' ? 'Sucesso' : 'Parcial'}
-                    </span>
-                  </TableCell>
-                  <TableCell className="text-muted-foreground">
+          <h2 className="text-lg font-medium mb-4">Histórico de Importações</h2>
+          <div className="space-y-3">
+            {importHistory.map((item) => (
+              <div
+                key={item.id}
+                className="flex items-center justify-between p-3 bg-muted/50 rounded-lg"
+              >
+                <div className="flex items-center gap-3">
+                  <FileSpreadsheet className="h-5 w-5 text-muted-foreground" />
+                  <div>
+                    <p className="font-medium">{item.file_name}</p>
+                    <p className="text-sm text-muted-foreground">
+                      {item.rows_imported} importados
+                      {item.rows_failed > 0 && `, ${item.rows_failed} com erro`}
+                    </p>
+                  </div>
+                </div>
+                <div className="flex items-center gap-2">
+                  {item.status === 'success' ? (
+                    <CheckCircle className="h-4 w-4 text-green-500" />
+                  ) : (
+                    <AlertCircle className="h-4 w-4 text-yellow-500" />
+                  )}
+                  <span className="text-sm text-muted-foreground">
                     {new Date(item.created_at).toLocaleDateString('pt-BR')}
-                  </TableCell>
-                </TableRow>
-              ))}
-            </TableBody>
-          </Table>
+                  </span>
+                </div>
+              </div>
+            ))}
+          </div>
         </Card>
       )}
     </div>

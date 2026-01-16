@@ -16,14 +16,6 @@ import {
 import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
 import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from '@/components/ui/table';
-import {
   Download,
   FileSpreadsheet,
   FileText,
@@ -31,7 +23,7 @@ import {
   Calendar,
   History,
 } from 'lucide-react';
-import * as XLSX from 'xlsx';
+import ExcelJS from 'exceljs';
 import { format, startOfMonth, endOfMonth, startOfWeek, endOfWeek, startOfYear, endOfYear, subMonths } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
 
@@ -225,14 +217,38 @@ export default function Export() {
     ];
   };
 
-  const downloadFile = (data: any[], fileName: string, format: ExportFormat) => {
-    const worksheet = XLSX.utils.json_to_sheet(data);
-    const workbook = XLSX.utils.book_new();
-    XLSX.utils.book_append_sheet(workbook, worksheet, 'Dados');
+  const downloadFile = async (data: any[], fileName: string, exportFormat: ExportFormat) => {
+    const workbook = new ExcelJS.Workbook();
+    const worksheet = workbook.addWorksheet('Dados');
 
-    if (format === 'csv') {
-      const csv = XLSX.utils.sheet_to_csv(worksheet);
-      const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+    // Add headers
+    if (data.length > 0) {
+      const headers = Object.keys(data[0]);
+      worksheet.addRow(headers);
+      
+      // Style header row
+      const headerRow = worksheet.getRow(1);
+      headerRow.font = { bold: true };
+      headerRow.fill = {
+        type: 'pattern',
+        pattern: 'solid',
+        fgColor: { argb: 'FFE0E0E0' }
+      };
+
+      // Add data rows
+      data.forEach(item => {
+        worksheet.addRow(Object.values(item));
+      });
+
+      // Auto-fit columns
+      worksheet.columns.forEach(column => {
+        column.width = 15;
+      });
+    }
+
+    if (exportFormat === 'csv') {
+      const csvContent = await workbook.csv.writeBuffer();
+      const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
       const url = URL.createObjectURL(blob);
       const a = document.createElement('a');
       a.href = url;
@@ -240,7 +256,14 @@ export default function Export() {
       a.click();
       URL.revokeObjectURL(url);
     } else {
-      XLSX.writeFile(workbook, `${fileName}.xlsx`);
+      const buffer = await workbook.xlsx.writeBuffer();
+      const blob = new Blob([buffer], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `${fileName}.xlsx`;
+      a.click();
+      URL.revokeObjectURL(url);
     }
   };
 
@@ -284,7 +307,7 @@ export default function Export() {
           fileName = `exportacao-${format(new Date(), 'yyyy-MM-dd')}`;
       }
 
-      downloadFile(data, fileName, exportFormat);
+      await downloadFile(data, fileName, exportFormat);
 
       // Save export history
       await supabase.from('export_history').insert({

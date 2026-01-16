@@ -162,7 +162,7 @@ export default function Settings() {
     try {
       const { error } = await supabase
         .from('authorized_emails')
-        .insert({ email: newEmail.toLowerCase().trim() });
+        .insert({ email: newEmail.toLowerCase().trim(), user_id: user?.id });
 
       if (error) throw error;
       

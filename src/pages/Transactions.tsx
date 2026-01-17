@@ -1,6 +1,8 @@
 import { useState, useEffect } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/hooks/useAuth';
+import { useCompany } from '@/hooks/useCompany';
+import { useAudit } from '@/hooks/useAudit';
 import { useToast } from '@/hooks/use-toast';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -28,7 +30,7 @@ import {
   TableHeader,
   TableRow,
 } from '@/components/ui/table';
-import { Plus, Pencil, Trash2, Filter, Search } from 'lucide-react';
+import { Plus, Pencil, Trash2, Filter, Search, Lock } from 'lucide-react';
 import { format } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
 import { cn } from '@/lib/utils';
@@ -37,6 +39,7 @@ interface Category {
   id: string;
   name: string;
   color: string;
+  keywords?: string[];
 }
 
 interface Transaction {
@@ -53,6 +56,8 @@ interface Transaction {
 
 export default function Transactions() {
   const { user } = useAuth();
+  const { company, canEdit, isAdmin } = useCompany();
+  const { logAction } = useAudit();
   const { toast } = useToast();
   const [transactions, setTransactions] = useState<Transaction[]>([]);
   const [categories, setCategories] = useState<Category[]>([]);
@@ -75,12 +80,52 @@ export default function Transactions() {
   const [formNotes, setFormNotes] = useState('');
 
   useEffect(() => {
-    if (user) {
+    if (user && company) {
       fetchData();
+
+      // Set up realtime subscription
+      const channel = supabase
+        .channel('transactions-realtime')
+        .on(
+          'postgres_changes',
+          {
+            event: '*',
+            schema: 'public',
+            table: 'transactions',
+            filter: `company_id=eq.${company.id}`,
+          },
+          () => {
+            fetchData();
+          }
+        )
+        .subscribe();
+
+      return () => {
+        supabase.removeChannel(channel);
+      };
     }
-  }, [user]);
+  }, [user, company]);
+
+  // Auto-categorize based on keywords
+  useEffect(() => {
+    if (formDescription && categories.length > 0 && !formCategory) {
+      const lowerDesc = formDescription.toLowerCase();
+      for (const cat of categories) {
+        if (cat.keywords) {
+          for (const keyword of cat.keywords) {
+            if (lowerDesc.includes(keyword.toLowerCase())) {
+              setFormCategory(cat.id);
+              return;
+            }
+          }
+        }
+      }
+    }
+  }, [formDescription, categories]);
 
   const fetchData = async () => {
+    if (!company) return;
+    
     try {
       const [transactionsRes, categoriesRes] = await Promise.all([
         supabase
@@ -90,15 +135,16 @@ export default function Transactions() {
             categories (
               id,
               name,
-              color
+              color,
+              keywords
             )
           `)
-          .eq('user_id', user?.id)
+          .eq('company_id', company.id)
           .order('date', { ascending: false }),
         supabase
           .from('categories')
           .select('*')
-          .eq('user_id', user?.id)
+          .eq('company_id', company.id)
           .order('name'),
       ]);
 
@@ -148,9 +194,11 @@ export default function Transactions() {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (!company) return;
     
     const transactionData = {
       user_id: user?.id,
+      company_id: company.id,
       description: formDescription,
       amount: parseFloat(formAmount),
       type: formType,
@@ -168,16 +216,35 @@ export default function Transactions() {
           .eq('id', editingTransaction.id);
 
         if (error) throw error;
+
+        await logAction({
+          action: 'update',
+          tableName: 'transactions',
+          recordId: editingTransaction.id,
+          oldData: editingTransaction,
+          newData: transactionData,
+        });
+
         toast({
           title: 'Sucesso',
           description: 'Transação atualizada com sucesso.',
         });
       } else {
-        const { error } = await supabase
+        const { data, error } = await supabase
           .from('transactions')
-          .insert([transactionData]);
+          .insert([transactionData])
+          .select()
+          .single();
 
         if (error) throw error;
+
+        await logAction({
+          action: 'create',
+          tableName: 'transactions',
+          recordId: data.id,
+          newData: transactionData,
+        });
+
         toast({
           title: 'Sucesso',
           description: 'Transação adicionada com sucesso.',
@@ -198,7 +265,18 @@ export default function Transactions() {
   };
 
   const handleDelete = async (id: string) => {
+    if (!isAdmin) {
+      toast({
+        title: 'Sem permissão',
+        description: 'Apenas administradores podem excluir transações.',
+        variant: 'destructive',
+      });
+      return;
+    }
+
     if (!confirm('Tem certeza que deseja excluir esta transação?')) return;
+
+    const transaction = transactions.find(t => t.id === id);
 
     try {
       const { error } = await supabase
@@ -207,6 +285,14 @@ export default function Transactions() {
         .eq('id', id);
 
       if (error) throw error;
+
+      await logAction({
+        action: 'delete',
+        tableName: 'transactions',
+        recordId: id,
+        oldData: transaction,
+      });
+
       toast({
         title: 'Sucesso',
         description: 'Transação excluída com sucesso.',
@@ -248,121 +334,128 @@ export default function Transactions() {
             Gerencie suas receitas e despesas
           </p>
         </div>
-        <Dialog open={dialogOpen} onOpenChange={(open) => {
-          setDialogOpen(open);
-          if (!open) resetForm();
-        }}>
-          <DialogTrigger asChild>
-            <Button className="gap-2">
-              <Plus className="h-4 w-4" />
-              Nova Transação
-            </Button>
-          </DialogTrigger>
-          <DialogContent className="sm:max-w-[500px]">
-            <DialogHeader>
-              <DialogTitle className="font-display">
-                {editingTransaction ? 'Editar Transação' : 'Nova Transação'}
-              </DialogTitle>
-            </DialogHeader>
-            <form onSubmit={handleSubmit} className="space-y-4 mt-4">
-              <div className="grid grid-cols-2 gap-4">
-                <div className="col-span-2 space-y-2">
-                  <Label htmlFor="description">Descrição</Label>
-                  <Input
-                    id="description"
-                    value={formDescription}
-                    onChange={(e) => setFormDescription(e.target.value)}
-                    placeholder="Ex: Venda de produto"
-                    required
-                  />
+        {canEdit ? (
+          <Dialog open={dialogOpen} onOpenChange={(open) => {
+            setDialogOpen(open);
+            if (!open) resetForm();
+          }}>
+            <DialogTrigger asChild>
+              <Button className="gap-2">
+                <Plus className="h-4 w-4" />
+                Nova Transação
+              </Button>
+            </DialogTrigger>
+            <DialogContent className="sm:max-w-[500px]">
+              <DialogHeader>
+                <DialogTitle className="font-display">
+                  {editingTransaction ? 'Editar Transação' : 'Nova Transação'}
+                </DialogTitle>
+              </DialogHeader>
+              <form onSubmit={handleSubmit} className="space-y-4 mt-4">
+                <div className="grid grid-cols-2 gap-4">
+                  <div className="col-span-2 space-y-2">
+                    <Label htmlFor="description">Descrição</Label>
+                    <Input
+                      id="description"
+                      value={formDescription}
+                      onChange={(e) => setFormDescription(e.target.value)}
+                      placeholder="Ex: Venda de produto"
+                      required
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="amount">Valor</Label>
+                    <Input
+                      id="amount"
+                      type="number"
+                      step="0.01"
+                      min="0"
+                      value={formAmount}
+                      onChange={(e) => setFormAmount(e.target.value)}
+                      placeholder="0,00"
+                      required
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="type">Tipo</Label>
+                    <Select value={formType} onValueChange={(v) => setFormType(v as 'income' | 'expense')}>
+                      <SelectTrigger>
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="income">Receita</SelectItem>
+                        <SelectItem value="expense">Despesa</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="date">Data</Label>
+                    <Input
+                      id="date"
+                      type="date"
+                      value={formDate}
+                      onChange={(e) => setFormDate(e.target.value)}
+                      required
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="category">Categoria</Label>
+                    <Select value={formCategory} onValueChange={setFormCategory}>
+                      <SelectTrigger>
+                        <SelectValue placeholder="Selecione..." />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {categories.map(cat => (
+                          <SelectItem key={cat.id} value={cat.id}>
+                            <div className="flex items-center gap-2">
+                              <div 
+                                className="w-3 h-3 rounded-full" 
+                                style={{ backgroundColor: cat.color }}
+                              />
+                              {cat.name}
+                            </div>
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  <div className="col-span-2 space-y-2">
+                    <Label htmlFor="source">Origem</Label>
+                    <Input
+                      id="source"
+                      value={formSource}
+                      onChange={(e) => setFormSource(e.target.value)}
+                      placeholder="Ex: Mercado Livre, Shopee..."
+                    />
+                  </div>
+                  <div className="col-span-2 space-y-2">
+                    <Label htmlFor="notes">Observações</Label>
+                    <Textarea
+                      id="notes"
+                      value={formNotes}
+                      onChange={(e) => setFormNotes(e.target.value)}
+                      placeholder="Notas adicionais..."
+                      rows={2}
+                    />
+                  </div>
                 </div>
-                <div className="space-y-2">
-                  <Label htmlFor="amount">Valor</Label>
-                  <Input
-                    id="amount"
-                    type="number"
-                    step="0.01"
-                    min="0"
-                    value={formAmount}
-                    onChange={(e) => setFormAmount(e.target.value)}
-                    placeholder="0,00"
-                    required
-                  />
+                <div className="flex justify-end gap-2 pt-4">
+                  <Button type="button" variant="outline" onClick={() => setDialogOpen(false)}>
+                    Cancelar
+                  </Button>
+                  <Button type="submit">
+                    {editingTransaction ? 'Salvar' : 'Adicionar'}
+                  </Button>
                 </div>
-                <div className="space-y-2">
-                  <Label htmlFor="type">Tipo</Label>
-                  <Select value={formType} onValueChange={(v) => setFormType(v as 'income' | 'expense')}>
-                    <SelectTrigger>
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="income">Receita</SelectItem>
-                      <SelectItem value="expense">Despesa</SelectItem>
-                    </SelectContent>
-                  </Select>
-                </div>
-                <div className="space-y-2">
-                  <Label htmlFor="date">Data</Label>
-                  <Input
-                    id="date"
-                    type="date"
-                    value={formDate}
-                    onChange={(e) => setFormDate(e.target.value)}
-                    required
-                  />
-                </div>
-                <div className="space-y-2">
-                  <Label htmlFor="category">Categoria</Label>
-                  <Select value={formCategory} onValueChange={setFormCategory}>
-                    <SelectTrigger>
-                      <SelectValue placeholder="Selecione..." />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {categories.map(cat => (
-                        <SelectItem key={cat.id} value={cat.id}>
-                          <div className="flex items-center gap-2">
-                            <div 
-                              className="w-3 h-3 rounded-full" 
-                              style={{ backgroundColor: cat.color }}
-                            />
-                            {cat.name}
-                          </div>
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </div>
-                <div className="col-span-2 space-y-2">
-                  <Label htmlFor="source">Origem</Label>
-                  <Input
-                    id="source"
-                    value={formSource}
-                    onChange={(e) => setFormSource(e.target.value)}
-                    placeholder="Ex: Mercado Livre, Shopee..."
-                  />
-                </div>
-                <div className="col-span-2 space-y-2">
-                  <Label htmlFor="notes">Observações</Label>
-                  <Textarea
-                    id="notes"
-                    value={formNotes}
-                    onChange={(e) => setFormNotes(e.target.value)}
-                    placeholder="Notas adicionais..."
-                    rows={2}
-                  />
-                </div>
-              </div>
-              <div className="flex justify-end gap-2 pt-4">
-                <Button type="button" variant="outline" onClick={() => setDialogOpen(false)}>
-                  Cancelar
-                </Button>
-                <Button type="submit">
-                  {editingTransaction ? 'Salvar' : 'Adicionar'}
-                </Button>
-              </div>
-            </form>
-          </DialogContent>
-        </Dialog>
+              </form>
+            </DialogContent>
+          </Dialog>
+        ) : (
+          <div className="flex items-center gap-2 text-muted-foreground">
+            <Lock className="h-4 w-4" />
+            <span className="text-sm">Somente visualização</span>
+          </div>
+        )}
       </div>
 
       {/* Filters */}
@@ -421,19 +514,19 @@ export default function Transactions() {
                 <TableHead>Data</TableHead>
                 <TableHead>Origem</TableHead>
                 <TableHead className="text-right">Valor</TableHead>
-                <TableHead className="w-[100px]">Ações</TableHead>
+                {canEdit && <TableHead className="w-[100px]">Ações</TableHead>}
               </TableRow>
             </TableHeader>
             <TableBody>
               {loading ? (
                 <TableRow>
-                  <TableCell colSpan={6} className="text-center py-8 text-muted-foreground">
+                  <TableCell colSpan={canEdit ? 6 : 5} className="text-center py-8 text-muted-foreground">
                     Carregando...
                   </TableCell>
                 </TableRow>
               ) : filteredTransactions.length === 0 ? (
                 <TableRow>
-                  <TableCell colSpan={6} className="text-center py-8 text-muted-foreground">
+                  <TableCell colSpan={canEdit ? 6 : 5} className="text-center py-8 text-muted-foreground">
                     Nenhuma transação encontrada.
                   </TableCell>
                 </TableRow>
@@ -467,25 +560,29 @@ export default function Transactions() {
                       {transaction.type === 'income' ? '+' : '-'}
                       {formatCurrency(transaction.amount)}
                     </TableCell>
-                    <TableCell>
-                      <div className="flex items-center gap-1">
-                        <Button
-                          variant="ghost"
-                          size="icon"
-                          onClick={() => openEditDialog(transaction)}
-                        >
-                          <Pencil className="h-4 w-4" />
-                        </Button>
-                        <Button
-                          variant="ghost"
-                          size="icon"
-                          onClick={() => handleDelete(transaction.id)}
-                          className="text-destructive hover:text-destructive"
-                        >
-                          <Trash2 className="h-4 w-4" />
-                        </Button>
-                      </div>
-                    </TableCell>
+                    {canEdit && (
+                      <TableCell>
+                        <div className="flex items-center gap-1">
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            onClick={() => openEditDialog(transaction)}
+                          >
+                            <Pencil className="h-4 w-4" />
+                          </Button>
+                          {isAdmin && (
+                            <Button
+                              variant="ghost"
+                              size="icon"
+                              onClick={() => handleDelete(transaction.id)}
+                              className="text-destructive hover:text-destructive"
+                            >
+                              <Trash2 className="h-4 w-4" />
+                            </Button>
+                          )}
+                        </div>
+                      </TableCell>
+                    )}
                   </TableRow>
                 ))
               )}

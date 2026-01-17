@@ -1,12 +1,14 @@
 import { useEffect, useState } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/hooks/useAuth';
+import { useCompany } from '@/hooks/useCompany';
 import { StatCard } from '@/components/dashboard/StatCard';
 import { RecentTransactions } from '@/components/dashboard/RecentTransactions';
 import { MonthlyChart } from '@/components/dashboard/MonthlyChart';
 import { Button } from '@/components/ui/button';
-import { Plus, TrendingUp, TrendingDown, Wallet, Target } from 'lucide-react';
+import { Plus, TrendingUp, TrendingDown, Wallet, Target, AlertTriangle } from 'lucide-react';
 import { Link } from 'react-router-dom';
+import { cn } from '@/lib/utils';
 
 interface Transaction {
   id: string;
@@ -29,6 +31,7 @@ interface DashboardStats {
 
 export default function Dashboard() {
   const { user } = useAuth();
+  const { company, canEdit } = useCompany();
   const [transactions, setTransactions] = useState<Transaction[]>([]);
   const [stats, setStats] = useState<DashboardStats>({
     totalIncome: 0,
@@ -40,12 +43,35 @@ export default function Dashboard() {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    if (user) {
+    if (user && company) {
       fetchDashboardData();
+
+      // Set up realtime subscription
+      const channel = supabase
+        .channel('dashboard-transactions')
+        .on(
+          'postgres_changes',
+          {
+            event: '*',
+            schema: 'public',
+            table: 'transactions',
+            filter: `company_id=eq.${company.id}`,
+          },
+          () => {
+            fetchDashboardData();
+          }
+        )
+        .subscribe();
+
+      return () => {
+        supabase.removeChannel(channel);
+      };
     }
-  }, [user]);
+  }, [user, company]);
 
   const fetchDashboardData = async () => {
+    if (!company) return;
+    
     try {
       // Fetch recent transactions with categories
       const { data: transactionsData, error: transactionsError } = await supabase
@@ -61,7 +87,7 @@ export default function Dashboard() {
             color
           )
         `)
-        .eq('user_id', user?.id)
+        .eq('company_id', company.id)
         .order('date', { ascending: false })
         .limit(5);
 
@@ -89,7 +115,7 @@ export default function Dashboard() {
       const { data: monthlyData, error: monthlyError } = await supabase
         .from('transactions')
         .select('amount, type')
-        .eq('user_id', user?.id)
+        .eq('company_id', company.id)
         .gte('date', startOfMonth)
         .lte('date', endOfMonth);
 
@@ -124,7 +150,7 @@ export default function Dashboard() {
       const { data: allTransactions, error: allError } = await supabase
         .from('transactions')
         .select('amount, type, date')
-        .eq('user_id', user?.id)
+        .eq('company_id', company.id)
         .gte('date', months[0].start)
         .lte('date', months[5].end);
 
@@ -171,16 +197,31 @@ export default function Dashboard() {
             Dashboard
           </h1>
           <p className="text-muted-foreground">
-            Bem-vindo de volta, {user?.user_metadata?.full_name || 'Usuário'}!
+            Bem-vindo de volta, {user?.user_metadata?.full_name || 'Usuário'}! | {company?.name}
           </p>
         </div>
-        <Link to="/transactions">
-          <Button className="gap-2">
-            <Plus className="h-4 w-4" />
-            Nova Transação
-          </Button>
-        </Link>
+        {canEdit && (
+          <Link to="/transactions">
+            <Button className="gap-2">
+              <Plus className="h-4 w-4" />
+              Nova Transação
+            </Button>
+          </Link>
+        )}
       </div>
+
+      {/* Negative Balance Alert */}
+      {stats.balance < 0 && (
+        <div className="p-4 rounded-lg bg-destructive/10 border border-destructive/30 flex items-center gap-3">
+          <AlertTriangle className="h-5 w-5 text-destructive" />
+          <div>
+            <p className="font-medium text-destructive">Saldo Negativo</p>
+            <p className="text-sm text-destructive/80">
+              Seu saldo do mês está negativo em {formatCurrency(Math.abs(stats.balance))}
+            </p>
+          </div>
+        </div>
+      )}
 
       {/* Stats Grid */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">

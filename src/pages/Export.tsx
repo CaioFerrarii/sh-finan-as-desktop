@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/hooks/useAuth';
+import { useCompany } from '@/hooks/useCompany';
 import { useToast } from '@/hooks/use-toast';
 import { useAlerts } from '@/hooks/useAlerts';
 import { Button } from '@/components/ui/button';
@@ -22,6 +23,7 @@ import {
   File,
   Calendar,
   History,
+  AlertCircle,
 } from 'lucide-react';
 import ExcelJS from 'exceljs';
 import { format, startOfMonth, endOfMonth, startOfWeek, endOfWeek, startOfYear, endOfYear, subMonths } from 'date-fns';
@@ -62,12 +64,12 @@ type ExportType = 'transactions' | 'monthly_summary' | 'category_summary' | 'ful
 
 export default function Export() {
   const { user } = useAuth();
+  const { company } = useCompany();
   const { toast } = useToast();
   const { createAlert } = useAlerts();
   const [loading, setLoading] = useState(false);
   const [exportHistory, setExportHistory] = useState<ExportHistory[]>([]);
   
-  // Form states
   const [periodType, setPeriodType] = useState<PeriodType>('month');
   const [customStartDate, setCustomStartDate] = useState('');
   const [customEndDate, setCustomEndDate] = useState('');
@@ -75,17 +77,19 @@ export default function Export() {
   const [exportType, setExportType] = useState<ExportType>('transactions');
 
   useEffect(() => {
-    if (user) {
+    if (user && company) {
       fetchExportHistory();
     }
-  }, [user]);
+  }, [user, company]);
 
   const fetchExportHistory = async () => {
+    if (!company) return;
+    
     try {
       const { data, error } = await supabase
         .from('export_history')
         .select('*')
-        .eq('user_id', user?.id)
+        .eq('company_id', company.id)
         .order('created_at', { ascending: false })
         .limit(5);
 
@@ -121,6 +125,8 @@ export default function Export() {
   };
 
   const fetchTransactions = async (startDate: Date, endDate: Date): Promise<Transaction[]> => {
+    if (!company) return [];
+    
     const { data, error } = await supabase
       .from('transactions')
       .select(`
@@ -130,7 +136,7 @@ export default function Export() {
           color
         )
       `)
-      .eq('user_id', user?.id)
+      .eq('company_id', company.id)
       .gte('date', startDate.toISOString().split('T')[0])
       .lte('date', endDate.toISOString().split('T')[0])
       .order('date', { ascending: false });
@@ -221,12 +227,10 @@ export default function Export() {
     const workbook = new ExcelJS.Workbook();
     const worksheet = workbook.addWorksheet('Dados');
 
-    // Add headers
     if (data.length > 0) {
       const headers = Object.keys(data[0]);
       worksheet.addRow(headers);
       
-      // Style header row
       const headerRow = worksheet.getRow(1);
       headerRow.font = { bold: true };
       headerRow.fill = {
@@ -235,12 +239,10 @@ export default function Export() {
         fgColor: { argb: 'FFE0E0E0' }
       };
 
-      // Add data rows
       data.forEach(item => {
         worksheet.addRow(Object.values(item));
       });
 
-      // Auto-fit columns
       worksheet.columns.forEach(column => {
         column.width = 15;
       });
@@ -268,6 +270,8 @@ export default function Export() {
   };
 
   const handleExport = async () => {
+    if (!company) return;
+    
     setLoading(true);
     try {
       const { start, end } = getDateRange();
@@ -309,9 +313,9 @@ export default function Export() {
 
       await downloadFile(data, fileName, exportFormat);
 
-      // Save export history
       await supabase.from('export_history').insert({
         user_id: user?.id,
+        company_id: company.id,
         file_name: `${fileName}.${exportFormat}`,
         format: exportFormat,
         export_type: exportType,
@@ -319,7 +323,6 @@ export default function Export() {
         period_end: end.toISOString().split('T')[0],
       });
 
-      // Create alert
       await createAlert('export_completed', `Exportação concluída - Formato ${exportFormat.toUpperCase()}`, {
         file_name: `${fileName}.${exportFormat}`,
         format: exportFormat,
@@ -355,6 +358,20 @@ export default function Export() {
     }
   };
 
+  if (!company) {
+    return (
+      <div className="p-6 lg:p-8">
+        <Card className="p-8 text-center">
+          <AlertCircle className="h-12 w-12 mx-auto text-muted-foreground mb-4" />
+          <h2 className="text-xl font-semibold mb-2">Empresa não configurada</h2>
+          <p className="text-muted-foreground">
+            Configure sua empresa para acessar esta funcionalidade.
+          </p>
+        </Card>
+      </div>
+    );
+  }
+
   return (
     <div className="p-6 lg:p-8 space-y-6">
       <div>
@@ -368,7 +385,6 @@ export default function Export() {
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-        {/* Export Form */}
         <Card className="lg:col-span-2">
           <CardHeader>
             <CardTitle>Nova Exportação</CardTitle>
@@ -469,7 +485,6 @@ export default function Export() {
           </CardContent>
         </Card>
 
-        {/* Export History */}
         <Card>
           <CardHeader>
             <CardTitle className="flex items-center gap-2">
@@ -499,13 +514,15 @@ export default function Export() {
                           {item.file_name}
                         </span>
                       </div>
-                      <Badge variant="secondary" className="uppercase text-xs">
-                        {item.format}
+                      <Badge variant="outline" className="text-xs">
+                        {item.format.toUpperCase()}
                       </Badge>
                     </div>
                     <div className="flex items-center justify-between text-xs text-muted-foreground">
                       <span>{getExportTypeLabel(item.export_type)}</span>
-                      <span>{format(new Date(item.created_at), 'dd/MM HH:mm')}</span>
+                      <span>
+                        {format(new Date(item.created_at), "dd/MM/yy HH:mm")}
+                      </span>
                     </div>
                   </div>
                 ))}

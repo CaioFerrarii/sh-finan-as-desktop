@@ -1,4 +1,4 @@
-import { useState, useRef } from 'react';
+import { useState, useRef, useEffect } from 'react';
 import { Upload, FileSpreadsheet, AlertCircle, CheckCircle, X, Loader2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
@@ -20,9 +20,12 @@ import {
 } from '@/components/ui/table';
 import { useToast } from '@/hooks/use-toast';
 import { useAuth } from '@/hooks/useAuth';
+import { useCompany } from '@/hooks/useCompany';
 import { supabase } from '@/integrations/supabase/client';
 import { useAlerts } from '@/hooks/useAlerts';
 import ExcelJS from 'exceljs';
+import { format } from 'date-fns';
+import { ptBR } from 'date-fns/locale';
 
 interface ColumnMapping {
   date: string;
@@ -44,6 +47,7 @@ interface ImportHistoryItem {
 
 export default function Import() {
   const { user } = useAuth();
+  const { company, canEdit } = useCompany();
   const { toast } = useToast();
   const { createAlert, checkDuplicates } = useAlerts();
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -63,20 +67,22 @@ export default function Import() {
   const [importHistory, setImportHistory] = useState<ImportHistoryItem[]>([]);
   const [step, setStep] = useState<'upload' | 'mapping' | 'preview'>('upload');
 
-  // Fetch import history
-  useState(() => {
-    const fetchHistory = async () => {
-      if (!user) return;
-      const { data } = await supabase
-        .from('import_history')
-        .select('*')
-        .eq('user_id', user.id)
-        .order('created_at', { ascending: false })
-        .limit(5);
-      if (data) setImportHistory(data);
-    };
-    fetchHistory();
-  });
+  useEffect(() => {
+    if (user && company) {
+      fetchHistory();
+    }
+  }, [user, company]);
+
+  const fetchHistory = async () => {
+    if (!company) return;
+    const { data } = await supabase
+      .from('import_history')
+      .select('*')
+      .eq('company_id', company.id)
+      .order('created_at', { ascending: false })
+      .limit(5);
+    if (data) setImportHistory(data);
+  };
 
   const handleFileSelect = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const selectedFile = e.target.files?.[0];
@@ -110,7 +116,6 @@ export default function Import() {
       const arrayBuffer = await file.arrayBuffer();
       
       if (file.name.endsWith('.csv')) {
-        // For CSV, read as text and parse manually
         const text = await file.text();
         const lines = text.split('\n').filter(line => line.trim());
         const worksheet = workbook.addWorksheet('Sheet1');
@@ -135,7 +140,6 @@ export default function Import() {
       const jsonData: any[][] = [];
       worksheet.eachRow((row, rowNumber) => {
         const rowValues = row.values as any[];
-        // ExcelJS row.values starts at index 1, shift to index 0
         jsonData.push(rowValues.slice(1));
       });
 
@@ -149,7 +153,7 @@ export default function Import() {
       }
 
       const headerRow = jsonData[0].map(h => String(h || ''));
-      const dataRows = jsonData.slice(1, 6); // Preview first 5 rows
+      const dataRows = jsonData.slice(1, 6);
 
       setHeaders(headerRow);
       setPreviewData(dataRows);
@@ -205,21 +209,17 @@ export default function Import() {
   const parseDate = (value: any): string => {
     if (!value) return new Date().toISOString().split('T')[0];
 
-    // Handle Date objects (ExcelJS converts Excel dates to Date objects)
     if (value instanceof Date) {
       return value.toISOString().split('T')[0];
     }
 
-    // Handle string dates
     const strValue = String(value);
     
-    // Try DD/MM/YYYY format
     const brMatch = strValue.match(/(\d{2})\/(\d{2})\/(\d{4})/);
     if (brMatch) {
       return `${brMatch[3]}-${brMatch[2]}-${brMatch[1]}`;
     }
 
-    // Try YYYY-MM-DD format
     const isoMatch = strValue.match(/(\d{4})-(\d{2})-(\d{2})/);
     if (isoMatch) {
       return strValue;
@@ -229,7 +229,7 @@ export default function Import() {
   };
 
   const handleImport = async () => {
-    if (!file || !user) return;
+    if (!file || !user || !company) return;
 
     setImporting(true);
     let rowsImported = 0;
@@ -241,7 +241,6 @@ export default function Import() {
       const arrayBuffer = await file.arrayBuffer();
       
       if (file.name.endsWith('.csv')) {
-        // For CSV, read as text and parse manually
         const text = await file.text();
         const lines = text.split('\n').filter(line => line.trim());
         const worksheet = workbook.addWorksheet('Sheet1');
@@ -265,7 +264,6 @@ export default function Import() {
       const headerRow = jsonData[0].map(h => String(h || ''));
       const dataRows = jsonData.slice(1);
 
-      // Get column indices
       const dateIdx = headerRow.indexOf(mapping.date);
       const descIdx = headerRow.indexOf(mapping.description);
       const amountIdx = headerRow.indexOf(mapping.amount);
@@ -273,11 +271,10 @@ export default function Import() {
       const taxIdx = mapping.taxAmount ? headerRow.indexOf(mapping.taxAmount) : -1;
       const costIdx = mapping.productCost ? headerRow.indexOf(mapping.productCost) : -1;
 
-      // Fetch existing categories
       const { data: categories } = await supabase
         .from('categories')
         .select('id, name')
-        .eq('user_id', user.id);
+        .eq('company_id', company.id);
 
       const categoryMap = new Map(categories?.map(c => [c.name.toLowerCase(), c.id]) || []);
 
@@ -291,18 +288,17 @@ export default function Import() {
           const description = String(row[descIdx] || '');
           const categoryName = categoryIdx >= 0 ? String(row[categoryIdx] || '') : '';
           
-          // Find or create category
           let categoryId: string | null = null;
           if (categoryName) {
             const existingCategoryId = categoryMap.get(categoryName.toLowerCase());
             if (existingCategoryId) {
               categoryId = existingCategoryId;
             } else {
-              // Create new category
               const { data: newCategory, error: catError } = await supabase
                 .from('categories')
                 .insert({
                   user_id: user.id,
+                  company_id: company.id,
                   name: categoryName,
                   color: '#' + Math.floor(Math.random()*16777215).toString(16).padStart(6, '0'),
                 })
@@ -316,7 +312,6 @@ export default function Import() {
             }
           }
 
-          // Check for duplicates
           const { isDuplicate, duplicateId } = await checkDuplicates(categoryId, amount, date);
           
           if (isDuplicate) {
@@ -329,9 +324,9 @@ export default function Import() {
             });
           }
 
-          // Insert transaction
           const transactionData = {
             user_id: user.id,
+            company_id: company.id,
             description,
             amount,
             type,
@@ -355,11 +350,11 @@ export default function Import() {
         }
       }
 
-      // Save import history
       await supabase
         .from('import_history')
         .insert({
           user_id: user.id,
+          company_id: company.id,
           file_name: file.name,
           rows_imported: rowsImported,
           rows_failed: rowsFailed,
@@ -367,7 +362,6 @@ export default function Import() {
           error_details: errors.length > 0 ? errors : null,
         });
 
-      // Create import alert
       await createAlert('import_completed', `Importação concluída: ${file.name}`, {
         fileName: file.name,
         rowsImported,
@@ -379,28 +373,8 @@ export default function Import() {
         description: `${rowsImported} registros importados${rowsFailed > 0 ? `, ${rowsFailed} com erro` : ''}.`,
       });
 
-      // Reset
-      setFile(null);
-      setHeaders([]);
-      setPreviewData([]);
-      setMapping({
-        date: '',
-        description: '',
-        amount: '',
-        category: '',
-        taxAmount: '',
-        productCost: '',
-      });
-      setStep('upload');
-
-      // Refresh history
-      const { data: history } = await supabase
-        .from('import_history')
-        .select('*')
-        .eq('user_id', user.id)
-        .order('created_at', { ascending: false })
-        .limit(5);
-      if (history) setImportHistory(history);
+      resetImport();
+      fetchHistory();
 
     } catch (error: any) {
       console.error('Import error:', error);
@@ -431,6 +405,20 @@ export default function Import() {
       fileInputRef.current.value = '';
     }
   };
+
+  if (!canEdit) {
+    return (
+      <div className="p-6 lg:p-8">
+        <Card className="p-8 text-center">
+          <AlertCircle className="h-12 w-12 mx-auto text-muted-foreground mb-4" />
+          <h2 className="text-xl font-semibold mb-2">Acesso Restrito</h2>
+          <p className="text-muted-foreground">
+            Você não tem permissão para importar dados.
+          </p>
+        </Card>
+      </div>
+    );
+  }
 
   return (
     <div className="p-6 lg:p-8 space-y-6">
@@ -504,7 +492,7 @@ export default function Import() {
             </Button>
           </div>
 
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+          <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
             <div className="space-y-2">
               <Label>Data *</Label>
               <Select value={mapping.date} onValueChange={(v) => handleMappingChange('date', v)}>
@@ -512,8 +500,8 @@ export default function Import() {
                   <SelectValue placeholder="Selecione a coluna" />
                 </SelectTrigger>
                 <SelectContent>
-                  {headers.map((h, i) => (
-                    <SelectItem key={i} value={h}>{h}</SelectItem>
+                  {headers.map((h) => (
+                    <SelectItem key={h} value={h}>{h}</SelectItem>
                   ))}
                 </SelectContent>
               </Select>
@@ -526,8 +514,8 @@ export default function Import() {
                   <SelectValue placeholder="Selecione a coluna" />
                 </SelectTrigger>
                 <SelectContent>
-                  {headers.map((h, i) => (
-                    <SelectItem key={i} value={h}>{h}</SelectItem>
+                  {headers.map((h) => (
+                    <SelectItem key={h} value={h}>{h}</SelectItem>
                   ))}
                 </SelectContent>
               </Select>
@@ -540,53 +528,53 @@ export default function Import() {
                   <SelectValue placeholder="Selecione a coluna" />
                 </SelectTrigger>
                 <SelectContent>
-                  {headers.map((h, i) => (
-                    <SelectItem key={i} value={h}>{h}</SelectItem>
+                  {headers.map((h) => (
+                    <SelectItem key={h} value={h}>{h}</SelectItem>
                   ))}
                 </SelectContent>
               </Select>
             </div>
 
             <div className="space-y-2">
-              <Label>Categoria (opcional)</Label>
+              <Label>Categoria</Label>
               <Select value={mapping.category} onValueChange={(v) => handleMappingChange('category', v)}>
                 <SelectTrigger>
                   <SelectValue placeholder="Selecione a coluna" />
                 </SelectTrigger>
                 <SelectContent>
                   <SelectItem value="">Nenhuma</SelectItem>
-                  {headers.map((h, i) => (
-                    <SelectItem key={i} value={h}>{h}</SelectItem>
+                  {headers.map((h) => (
+                    <SelectItem key={h} value={h}>{h}</SelectItem>
                   ))}
                 </SelectContent>
               </Select>
             </div>
 
             <div className="space-y-2">
-              <Label>Impostos (opcional)</Label>
+              <Label>Imposto</Label>
               <Select value={mapping.taxAmount} onValueChange={(v) => handleMappingChange('taxAmount', v)}>
                 <SelectTrigger>
                   <SelectValue placeholder="Selecione a coluna" />
                 </SelectTrigger>
                 <SelectContent>
                   <SelectItem value="">Nenhuma</SelectItem>
-                  {headers.map((h, i) => (
-                    <SelectItem key={i} value={h}>{h}</SelectItem>
+                  {headers.map((h) => (
+                    <SelectItem key={h} value={h}>{h}</SelectItem>
                   ))}
                 </SelectContent>
               </Select>
             </div>
 
             <div className="space-y-2">
-              <Label>Custo do Produto (opcional)</Label>
+              <Label>Custo do Produto</Label>
               <Select value={mapping.productCost} onValueChange={(v) => handleMappingChange('productCost', v)}>
                 <SelectTrigger>
                   <SelectValue placeholder="Selecione a coluna" />
                 </SelectTrigger>
                 <SelectContent>
                   <SelectItem value="">Nenhuma</SelectItem>
-                  {headers.map((h, i) => (
-                    <SelectItem key={i} value={h}>{h}</SelectItem>
+                  {headers.map((h) => (
+                    <SelectItem key={h} value={h}>{h}</SelectItem>
                   ))}
                 </SelectContent>
               </Select>
@@ -594,23 +582,23 @@ export default function Import() {
           </div>
 
           {/* Preview Table */}
-          <div className="space-y-2">
-            <Label>Preview dos Dados</Label>
-            <div className="border rounded-lg overflow-x-auto">
+          <div>
+            <h3 className="text-sm font-medium mb-2">Prévia dos dados</h3>
+            <div className="overflow-x-auto border rounded-lg">
               <Table>
                 <TableHeader>
                   <TableRow>
-                    {headers.map((h, i) => (
-                      <TableHead key={i} className="whitespace-nowrap">{h}</TableHead>
+                    {headers.map((h) => (
+                      <TableHead key={h} className="whitespace-nowrap">{h}</TableHead>
                     ))}
                   </TableRow>
                 </TableHeader>
                 <TableBody>
                   {previewData.map((row, i) => (
                     <TableRow key={i}>
-                      {headers.map((_, j) => (
+                      {headers.map((h, j) => (
                         <TableCell key={j} className="whitespace-nowrap">
-                          {row[j] !== undefined && row[j] !== null ? String(row[j]) : '-'}
+                          {String(row[j] || '')}
                         </TableCell>
                       ))}
                     </TableRow>
@@ -620,7 +608,7 @@ export default function Import() {
             </div>
           </div>
 
-          <div className="flex gap-4">
+          <div className="flex justify-end gap-2">
             <Button variant="outline" onClick={resetImport}>
               Cancelar
             </Button>
@@ -635,39 +623,25 @@ export default function Import() {
       {step === 'preview' && (
         <Card className="p-6 space-y-6">
           <div className="flex items-center gap-3">
-            <CheckCircle className="h-6 w-6 text-green-500" />
+            <CheckCircle className="h-6 w-6 text-primary" />
             <div>
               <p className="font-medium">Pronto para importar</p>
               <p className="text-sm text-muted-foreground">
-                {previewData.length} registros serão processados
+                {file?.name} - Mapeamento configurado
               </p>
             </div>
           </div>
 
           <div className="bg-muted/50 rounded-lg p-4 space-y-2">
-            <p className="font-medium">Mapeamento configurado:</p>
-            <ul className="text-sm space-y-1 text-muted-foreground">
-              <li>• Data: <span className="text-foreground">{mapping.date}</span></li>
-              <li>• Descrição: <span className="text-foreground">{mapping.description}</span></li>
-              <li>• Valor: <span className="text-foreground">{mapping.amount}</span></li>
-              {mapping.category && <li>• Categoria: <span className="text-foreground">{mapping.category}</span></li>}
-              {mapping.taxAmount && <li>• Impostos: <span className="text-foreground">{mapping.taxAmount}</span></li>}
-              {mapping.productCost && <li>• Custo: <span className="text-foreground">{mapping.productCost}</span></li>}
-            </ul>
+            <p className="text-sm"><strong>Data:</strong> {mapping.date}</p>
+            <p className="text-sm"><strong>Descrição:</strong> {mapping.description}</p>
+            <p className="text-sm"><strong>Valor:</strong> {mapping.amount}</p>
+            {mapping.category && <p className="text-sm"><strong>Categoria:</strong> {mapping.category}</p>}
+            {mapping.taxAmount && <p className="text-sm"><strong>Imposto:</strong> {mapping.taxAmount}</p>}
+            {mapping.productCost && <p className="text-sm"><strong>Custo:</strong> {mapping.productCost}</p>}
           </div>
 
-          <div className="bg-yellow-500/10 border border-yellow-500/20 rounded-lg p-4 flex items-start gap-3">
-            <AlertCircle className="h-5 w-5 text-yellow-500 mt-0.5" />
-            <div>
-              <p className="font-medium text-yellow-700 dark:text-yellow-400">Atenção</p>
-              <p className="text-sm text-muted-foreground">
-                O sistema irá verificar duplicidades e criar alertas caso encontre transações semelhantes.
-                Categorias não existentes serão criadas automaticamente.
-              </p>
-            </div>
-          </div>
-
-          <div className="flex gap-4">
+          <div className="flex justify-end gap-2">
             <Button variant="outline" onClick={() => setStep('mapping')}>
               Voltar
             </Button>
@@ -678,10 +652,7 @@ export default function Import() {
                   Importando...
                 </>
               ) : (
-                <>
-                  <Upload className="h-4 w-4 mr-2" />
-                  Importar Dados
-                </>
+                'Importar Dados'
               )}
             </Button>
           </div>
@@ -691,32 +662,23 @@ export default function Import() {
       {/* Import History */}
       {importHistory.length > 0 && (
         <Card className="p-6">
-          <h2 className="text-lg font-medium mb-4">Histórico de Importações</h2>
+          <h2 className="text-lg font-semibold mb-4">Histórico de Importações</h2>
           <div className="space-y-3">
             {importHistory.map((item) => (
-              <div
-                key={item.id}
-                className="flex items-center justify-between p-3 bg-muted/50 rounded-lg"
-              >
-                <div className="flex items-center gap-3">
-                  <FileSpreadsheet className="h-5 w-5 text-muted-foreground" />
-                  <div>
-                    <p className="font-medium">{item.file_name}</p>
-                    <p className="text-sm text-muted-foreground">
-                      {item.rows_imported} importados
-                      {item.rows_failed > 0 && `, ${item.rows_failed} com erro`}
-                    </p>
-                  </div>
+              <div key={item.id} className="flex items-center justify-between p-3 bg-muted/50 rounded-lg">
+                <div>
+                  <p className="font-medium">{item.file_name}</p>
+                  <p className="text-sm text-muted-foreground">
+                    {format(new Date(item.created_at), "dd/MM/yyyy 'às' HH:mm", { locale: ptBR })}
+                  </p>
                 </div>
-                <div className="flex items-center gap-2">
-                  {item.status === 'success' ? (
-                    <CheckCircle className="h-4 w-4 text-green-500" />
-                  ) : (
-                    <AlertCircle className="h-4 w-4 text-yellow-500" />
-                  )}
-                  <span className="text-sm text-muted-foreground">
-                    {new Date(item.created_at).toLocaleDateString('pt-BR')}
-                  </span>
+                <div className="text-right">
+                  <p className="text-sm">
+                    <span className="text-primary">{item.rows_imported}</span> importados
+                    {item.rows_failed > 0 && (
+                      <span className="text-destructive ml-2">{item.rows_failed} falhas</span>
+                    )}
+                  </p>
                 </div>
               </div>
             ))}

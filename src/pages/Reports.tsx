@@ -19,6 +19,7 @@ import {
   TableRow,
 } from '@/components/ui/table';
 import { useAuth } from '@/hooks/useAuth';
+import { useCompany } from '@/hooks/useCompany';
 import { supabase } from '@/integrations/supabase/client';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, LineChart as ReLineChart, Line, PieChart as RePieChart, Pie, Cell, Legend } from 'recharts';
 import { format, startOfMonth, endOfMonth, subMonths, startOfYear, endOfYear } from 'date-fns';
@@ -66,6 +67,7 @@ const CHART_COLORS = ['#10b981', '#3b82f6', '#f59e0b', '#8b5cf6', '#ef4444', '#0
 
 export default function Reports() {
   const { user } = useAuth();
+  const { company } = useCompany();
   const [transactions, setTransactions] = useState<Transaction[]>([]);
   const [loading, setLoading] = useState(true);
   const [selectedYear, setSelectedYear] = useState(new Date().getFullYear().toString());
@@ -76,12 +78,14 @@ export default function Reports() {
   const [comparisonData, setComparisonData] = useState<any[]>([]);
 
   useEffect(() => {
-    if (user) {
+    if (user && company) {
       fetchTransactions();
     }
-  }, [user, selectedYear, selectedMonth]);
+  }, [user, company, selectedYear, selectedMonth]);
 
   const fetchTransactions = async () => {
+    if (!company) return;
+    
     setLoading(true);
     try {
       const yearStart = startOfYear(new Date(parseInt(selectedYear), 0));
@@ -96,7 +100,7 @@ export default function Reports() {
             color
           )
         `)
-        .eq('user_id', user?.id)
+        .eq('company_id', company.id)
         .gte('date', format(yearStart, 'yyyy-MM-dd'))
         .lte('date', format(yearEnd, 'yyyy-MM-dd'))
         .order('date', { ascending: true });
@@ -473,10 +477,10 @@ export default function Reports() {
                               {cat.name}
                             </div>
                           </TableCell>
-                          <TableCell className="text-right font-medium">
+                          <TableCell className="text-right">
                             {formatCurrency(cat.value)}
                           </TableCell>
-                          <TableCell className="text-right text-muted-foreground">
+                          <TableCell className="text-right">
                             {cat.percentage.toFixed(1)}%
                           </TableCell>
                           <TableCell>
@@ -505,16 +509,16 @@ export default function Reports() {
         {/* Comparison Tab */}
         <TabsContent value="comparison">
           <Card className="p-6">
-            <h2 className="text-xl font-semibold mb-6">Comparativo Mensal - {selectedYear}</h2>
+            <h2 className="text-xl font-semibold mb-6">Comparativo Anual</h2>
             
             {loading ? (
               <div className="text-center py-8 text-muted-foreground">Carregando...</div>
             ) : (
               <div className="h-80">
                 <ResponsiveContainer width="100%" height="100%">
-                  <BarChart data={cashFlowData}>
+                  <BarChart data={comparisonData}>
                     <CartesianGrid strokeDasharray="3 3" className="stroke-muted" />
-                    <XAxis dataKey="month" className="text-xs" />
+                    <XAxis dataKey="name" className="text-xs" />
                     <YAxis className="text-xs" tickFormatter={(v) => `R$ ${(v/1000).toFixed(0)}k`} />
                     <Tooltip 
                       formatter={(value: number) => formatCurrency(value)}
@@ -524,23 +528,11 @@ export default function Reports() {
                         borderRadius: '8px'
                       }}
                     />
-                    <Legend />
-                    <Bar dataKey="balance" name="Saldo Mensal" fill="hsl(var(--primary))" radius={[4, 4, 0, 0]} />
+                    <Bar dataKey="value" name="Saldo" fill="hsl(var(--primary))" radius={[4, 4, 0, 0]} />
                   </BarChart>
                 </ResponsiveContainer>
               </div>
             )}
-
-            <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mt-6">
-              {cashFlowData.slice(-4).map((month) => (
-                <div key={month.month} className="bg-muted/50 p-4 rounded-lg text-center">
-                  <p className="text-sm text-muted-foreground capitalize">{month.month}</p>
-                  <p className={`text-lg font-semibold ${month.balance >= 0 ? 'text-primary' : 'text-destructive'}`}>
-                    {formatCurrency(month.balance)}
-                  </p>
-                </div>
-              ))}
-            </div>
           </Card>
         </TabsContent>
       </Tabs>

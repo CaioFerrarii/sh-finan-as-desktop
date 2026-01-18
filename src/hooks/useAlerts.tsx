@@ -1,6 +1,7 @@
 import { useCallback } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/hooks/useAuth';
+import { useCompany } from '@/hooks/useCompany';
 
 export type AlertType = 
   | 'transaction_created'
@@ -29,6 +30,7 @@ interface AlertMetadata {
 
 export function useAlerts() {
   const { user } = useAuth();
+  const { company } = useCompany();
 
   const createAlert = useCallback(async (
     type: AlertType,
@@ -42,6 +44,7 @@ export function useAlerts() {
         .from('alerts')
         .insert({
           user_id: user.id,
+          company_id: company?.id || null,
           type,
           message,
           metadata,
@@ -53,7 +56,7 @@ export function useAlerts() {
     } catch (error) {
       console.error('Error creating alert:', error);
     }
-  }, [user?.id]);
+  }, [user?.id, company?.id]);
 
   const checkDuplicates = useCallback(async (
     categoryId: string | null,
@@ -61,7 +64,7 @@ export function useAlerts() {
     date: string,
     currentTransactionId?: string
   ): Promise<{ isDuplicate: boolean; duplicateId?: string }> => {
-    if (!user?.id) return { isDuplicate: false };
+    if (!user?.id || !company?.id) return { isDuplicate: false };
 
     try {
       // Check for transactions with same category, amount, and within the same week
@@ -74,7 +77,7 @@ export function useAlerts() {
       let query = supabase
         .from('transactions')
         .select('id')
-        .eq('user_id', user.id)
+        .eq('company_id', company.id)
         .eq('amount', amount)
         .gte('date', weekStart.toISOString().split('T')[0])
         .lte('date', weekEnd.toISOString().split('T')[0]);
@@ -103,7 +106,7 @@ export function useAlerts() {
       console.error('Error checking duplicates:', error);
       return { isDuplicate: false };
     }
-  }, [user?.id]);
+  }, [user?.id, company?.id]);
 
   return {
     createAlert,

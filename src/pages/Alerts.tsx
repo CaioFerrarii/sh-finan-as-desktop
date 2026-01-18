@@ -27,6 +27,7 @@ import {
 import { Badge } from '@/components/ui/badge';
 import { useToast } from '@/hooks/use-toast';
 import { useAuth } from '@/hooks/useAuth';
+import { useCompany } from '@/hooks/useCompany';
 import { supabase } from '@/integrations/supabase/client';
 import { format } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
@@ -39,6 +40,7 @@ interface Alert {
   resolved: boolean;
   created_at: string;
   user_id: string;
+  company_id: string | null;
 }
 
 const ALERT_TYPES = {
@@ -52,10 +54,17 @@ const ALERT_TYPES = {
   login: { label: 'Login', icon: CheckCircle, color: 'text-primary' },
   logout: { label: 'Logout', icon: Info, color: 'text-muted-foreground' },
   system: { label: 'Sistema', icon: Info, color: 'text-muted-foreground' },
+  transaction_created: { label: 'Criação', icon: CheckCircle, color: 'text-primary' },
+  transaction_edited: { label: 'Edição', icon: Info, color: 'text-info' },
+  transaction_deleted: { label: 'Exclusão', icon: XCircle, color: 'text-destructive' },
+  import_completed: { label: 'Importação', icon: CheckCircle, color: 'text-primary' },
+  export_completed: { label: 'Exportação', icon: CheckCircle, color: 'text-primary' },
+  duplicate_detected: { label: 'Duplicidade', icon: AlertTriangle, color: 'text-warning' },
 };
 
 export default function Alerts() {
   const { user } = useAuth();
+  const { company } = useCompany();
   const { toast } = useToast();
   
   const [alerts, setAlerts] = useState<Alert[]>([]);
@@ -66,13 +75,15 @@ export default function Alerts() {
   const [selectedAlert, setSelectedAlert] = useState<Alert | null>(null);
 
   useEffect(() => {
-    if (user) {
+    if (user && company) {
       fetchAlerts();
       setupRealtimeSubscription();
     }
-  }, [user]);
+  }, [user, company]);
 
   const setupRealtimeSubscription = () => {
+    if (!company) return;
+    
     const channel = supabase
       .channel('alerts-realtime')
       .on(
@@ -81,7 +92,7 @@ export default function Alerts() {
           event: 'INSERT',
           schema: 'public',
           table: 'alerts',
-          filter: `user_id=eq.${user?.id}`,
+          filter: `company_id=eq.${company.id}`,
         },
         (payload) => {
           setAlerts(prev => [payload.new as Alert, ...prev]);
@@ -95,11 +106,13 @@ export default function Alerts() {
   };
 
   const fetchAlerts = async () => {
+    if (!company) return;
+    
     try {
       const { data, error } = await supabase
         .from('alerts')
         .select('*')
-        .eq('user_id', user?.id)
+        .eq('company_id', company.id)
         .order('created_at', { ascending: false });
 
       if (error) throw error;
@@ -166,16 +179,28 @@ export default function Alerts() {
     return matchesSearch && matchesType && matchesMonth;
   });
 
-  // Get unique months from alerts
   const months = [...new Set(alerts.map(a => a.created_at.substring(0, 7)))].sort().reverse();
 
-  // Stats
   const totalAlerts = alerts.length;
   const unresolvedAlerts = alerts.filter(a => !a.resolved).length;
-  const duplicateAlerts = alerts.filter(a => a.type === 'duplicate').length;
+  const duplicateAlerts = alerts.filter(a => a.type === 'duplicate_detected' || a.type === 'duplicate').length;
   const todayAlerts = alerts.filter(a => 
     a.created_at.startsWith(new Date().toISOString().split('T')[0])
   ).length;
+
+  if (!company) {
+    return (
+      <div className="p-6 lg:p-8">
+        <Card className="p-8 text-center">
+          <AlertTriangle className="h-12 w-12 mx-auto text-muted-foreground mb-4" />
+          <h2 className="text-xl font-semibold mb-2">Empresa não configurada</h2>
+          <p className="text-muted-foreground">
+            Configure sua empresa para acessar esta funcionalidade.
+          </p>
+        </Card>
+      </div>
+    );
+  }
 
   return (
     <div className="p-6 lg:p-8 space-y-6">

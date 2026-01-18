@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/hooks/useAuth';
+import { useCompany } from '@/hooks/useCompany';
 import { useToast } from '@/hooks/use-toast';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -35,6 +36,7 @@ const colorOptions = [
 
 export default function Categories() {
   const { user } = useAuth();
+  const { company, canEdit } = useCompany();
   const { toast } = useToast();
   const [categories, setCategories] = useState<Category[]>([]);
   const [loading, setLoading] = useState(true);
@@ -47,17 +49,19 @@ export default function Categories() {
   const [formKeywords, setFormKeywords] = useState('');
 
   useEffect(() => {
-    if (user) {
+    if (user && company) {
       fetchCategories();
     }
-  }, [user]);
+  }, [user, company]);
 
   const fetchCategories = async () => {
+    if (!company) return;
+    
     try {
       const { data, error } = await supabase
         .from('categories')
         .select('*')
-        .eq('user_id', user?.id)
+        .eq('company_id', company.id)
         .order('name');
 
       if (error) throw error;
@@ -91,6 +95,7 @@ export default function Categories() {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (!company || !user) return;
     
     const keywordsArray = formKeywords
       .split(',')
@@ -98,7 +103,8 @@ export default function Categories() {
       .filter(k => k.length > 0);
 
     const categoryData = {
-      user_id: user?.id,
+      user_id: user.id,
+      company_id: company.id,
       name: formName,
       color: formColor,
       keywords: keywordsArray,
@@ -178,75 +184,77 @@ export default function Categories() {
             Organize suas transações por categorias
           </p>
         </div>
-        <Dialog open={dialogOpen} onOpenChange={(open) => {
-          setDialogOpen(open);
-          if (!open) resetForm();
-        }}>
-          <DialogTrigger asChild>
-            <Button className="gap-2">
-              <Plus className="h-4 w-4" />
-              Nova Categoria
-            </Button>
-          </DialogTrigger>
-          <DialogContent className="sm:max-w-[400px]">
-            <DialogHeader>
-              <DialogTitle className="font-display">
-                {editingCategory ? 'Editar Categoria' : 'Nova Categoria'}
-              </DialogTitle>
-            </DialogHeader>
-            <form onSubmit={handleSubmit} className="space-y-4 mt-4">
-              <div className="space-y-2">
-                <Label htmlFor="name">Nome</Label>
-                <Input
-                  id="name"
-                  value={formName}
-                  onChange={(e) => setFormName(e.target.value)}
-                  placeholder="Ex: Vendas"
-                  required
-                />
-              </div>
-              <div className="space-y-2">
-                <Label>Cor</Label>
-                <div className="grid grid-cols-4 gap-2">
-                  {colorOptions.map((color) => (
-                    <button
-                      key={color.value}
-                      type="button"
-                      onClick={() => setFormColor(color.value)}
-                      className={`w-full aspect-square rounded-lg border-2 transition-all ${
-                        formColor === color.value
-                          ? 'border-foreground scale-105'
-                          : 'border-transparent'
-                      }`}
-                      style={{ backgroundColor: color.value }}
-                      title={color.name}
-                    />
-                  ))}
+        {canEdit && (
+          <Dialog open={dialogOpen} onOpenChange={(open) => {
+            setDialogOpen(open);
+            if (!open) resetForm();
+          }}>
+            <DialogTrigger asChild>
+              <Button className="gap-2">
+                <Plus className="h-4 w-4" />
+                Nova Categoria
+              </Button>
+            </DialogTrigger>
+            <DialogContent className="sm:max-w-[400px]">
+              <DialogHeader>
+                <DialogTitle className="font-display">
+                  {editingCategory ? 'Editar Categoria' : 'Nova Categoria'}
+                </DialogTitle>
+              </DialogHeader>
+              <form onSubmit={handleSubmit} className="space-y-4 mt-4">
+                <div className="space-y-2">
+                  <Label htmlFor="name">Nome</Label>
+                  <Input
+                    id="name"
+                    value={formName}
+                    onChange={(e) => setFormName(e.target.value)}
+                    placeholder="Ex: Vendas"
+                    required
+                  />
                 </div>
-              </div>
-              <div className="space-y-2">
-                <Label htmlFor="keywords">Palavras-chave (opcional)</Label>
-                <Input
-                  id="keywords"
-                  value={formKeywords}
-                  onChange={(e) => setFormKeywords(e.target.value)}
-                  placeholder="frete, taxa, envio (separar por vírgula)"
-                />
-                <p className="text-xs text-muted-foreground">
-                  Usado para categorização automática de transações
-                </p>
-              </div>
-              <div className="flex justify-end gap-2 pt-4">
-                <Button type="button" variant="outline" onClick={() => setDialogOpen(false)}>
-                  Cancelar
-                </Button>
-                <Button type="submit">
-                  {editingCategory ? 'Salvar' : 'Criar'}
-                </Button>
-              </div>
-            </form>
-          </DialogContent>
-        </Dialog>
+                <div className="space-y-2">
+                  <Label>Cor</Label>
+                  <div className="grid grid-cols-4 gap-2">
+                    {colorOptions.map((color) => (
+                      <button
+                        key={color.value}
+                        type="button"
+                        onClick={() => setFormColor(color.value)}
+                        className={`w-full aspect-square rounded-lg border-2 transition-all ${
+                          formColor === color.value
+                            ? 'border-foreground scale-105'
+                            : 'border-transparent'
+                        }`}
+                        style={{ backgroundColor: color.value }}
+                        title={color.name}
+                      />
+                    ))}
+                  </div>
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="keywords">Palavras-chave (opcional)</Label>
+                  <Input
+                    id="keywords"
+                    value={formKeywords}
+                    onChange={(e) => setFormKeywords(e.target.value)}
+                    placeholder="frete, taxa, envio (separar por vírgula)"
+                  />
+                  <p className="text-xs text-muted-foreground">
+                    Usado para categorização automática de transações
+                  </p>
+                </div>
+                <div className="flex justify-end gap-2 pt-4">
+                  <Button type="button" variant="outline" onClick={() => setDialogOpen(false)}>
+                    Cancelar
+                  </Button>
+                  <Button type="submit">
+                    {editingCategory ? 'Salvar' : 'Criar'}
+                  </Button>
+                </div>
+              </form>
+            </DialogContent>
+          </Dialog>
+        )}
       </div>
 
       {/* Categories Grid */}
@@ -291,24 +299,26 @@ export default function Categories() {
                     )}
                   </div>
                 </div>
-                <div className="flex items-center gap-1">
-                  <Button
-                    variant="ghost"
-                    size="icon"
-                    className="h-8 w-8"
-                    onClick={() => openEditDialog(category)}
-                  >
-                    <Pencil className="h-4 w-4" />
-                  </Button>
-                  <Button
-                    variant="ghost"
-                    size="icon"
-                    className="h-8 w-8 text-destructive hover:text-destructive"
-                    onClick={() => handleDelete(category.id)}
-                  >
-                    <Trash2 className="h-4 w-4" />
-                  </Button>
-                </div>
+                {canEdit && (
+                  <div className="flex items-center gap-1">
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      className="h-8 w-8"
+                      onClick={() => openEditDialog(category)}
+                    >
+                      <Pencil className="h-4 w-4" />
+                    </Button>
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      className="h-8 w-8 text-destructive hover:text-destructive"
+                      onClick={() => handleDelete(category.id)}
+                    >
+                      <Trash2 className="h-4 w-4" />
+                    </Button>
+                  </div>
+                )}
               </div>
             </div>
           ))}

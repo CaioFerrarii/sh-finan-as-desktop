@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback } from 'react';
-import { Table2, Plus, Trash2, Save, Filter, Search, Loader2 } from 'lucide-react';
+import { Table2, Plus, Trash2, Save, Filter, Search, Loader2, AlertCircle } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Card } from '@/components/ui/card';
@@ -30,6 +30,7 @@ import {
 } from '@/components/ui/alert-dialog';
 import { useToast } from '@/hooks/use-toast';
 import { useAuth } from '@/hooks/useAuth';
+import { useCompany } from '@/hooks/useCompany';
 import { useAlerts } from '@/hooks/useAlerts';
 import { supabase } from '@/integrations/supabase/client';
 import { format } from 'date-fns';
@@ -65,6 +66,7 @@ interface EditingCell {
 
 export default function Spreadsheet() {
   const { user } = useAuth();
+  const { company, canEdit } = useCompany();
   const { toast } = useToast();
   const { createAlert } = useAlerts();
   
@@ -79,13 +81,15 @@ export default function Spreadsheet() {
   const [deleteId, setDeleteId] = useState<string | null>(null);
 
   useEffect(() => {
-    if (user) {
+    if (user && company) {
       fetchData();
       setupRealtimeSubscription();
     }
-  }, [user]);
+  }, [user, company]);
 
   const setupRealtimeSubscription = () => {
+    if (!company) return;
+    
     const channel = supabase
       .channel('spreadsheet-transactions')
       .on(
@@ -94,7 +98,7 @@ export default function Spreadsheet() {
           event: '*',
           schema: 'public',
           table: 'transactions',
-          filter: `user_id=eq.${user?.id}`,
+          filter: `company_id=eq.${company.id}`,
         },
         () => {
           fetchData();
@@ -108,6 +112,8 @@ export default function Spreadsheet() {
   };
 
   const fetchData = async () => {
+    if (!company) return;
+    
     try {
       const [transactionsRes, categoriesRes] = await Promise.all([
         supabase
@@ -120,12 +126,12 @@ export default function Spreadsheet() {
               color
             )
           `)
-          .eq('user_id', user?.id)
+          .eq('company_id', company.id)
           .order('date', { ascending: false }),
         supabase
           .from('categories')
           .select('*')
-          .eq('user_id', user?.id)
+          .eq('company_id', company.id)
           .order('name'),
       ]);
 
@@ -152,6 +158,7 @@ export default function Spreadsheet() {
   };
 
   const handleCellDoubleClick = (id: string, field: keyof Transaction, value: any) => {
+    if (!canEdit) return;
     setEditingCell({ id, field, value });
   };
 
@@ -172,7 +179,6 @@ export default function Spreadsheet() {
       const oldValue = transaction[editingCell.field];
       let newValue = editingCell.value;
 
-      // Parse numeric fields
       if (['amount', 'tax_amount', 'product_cost', 'profit'].includes(editingCell.field)) {
         newValue = parseFloat(newValue) || 0;
       }
@@ -184,7 +190,6 @@ export default function Spreadsheet() {
 
       if (error) throw error;
 
-      // Create edit alert
       await createAlert('transaction_edited', `Transação editada: ${transaction.description}`, {
         transactionId: editingCell.id,
         field: editingCell.field,
@@ -220,13 +225,14 @@ export default function Spreadsheet() {
   };
 
   const handleAddRow = async () => {
-    if (!user) return;
+    if (!user || !company) return;
 
     try {
       const { data, error } = await supabase
         .from('transactions')
         .insert({
           user_id: user.id,
+          company_id: company.id,
           description: 'Nova transação',
           amount: 0,
           type: 'expense',
@@ -318,7 +324,6 @@ export default function Spreadsheet() {
     }
   };
 
-  // Get unique months from transactions
   const months = [...new Set(transactions.map(t => t.date.substring(0, 7)))].sort().reverse();
 
   const renderEditableCell = (
@@ -345,13 +350,30 @@ export default function Spreadsheet() {
 
     return (
       <div
-        className="cursor-pointer hover:bg-muted/50 px-2 py-1 rounded min-h-[32px] flex items-center"
+        className={cn(
+          "px-2 py-1 rounded min-h-[32px] flex items-center",
+          canEdit && "cursor-pointer hover:bg-muted/50"
+        )}
         onDoubleClick={() => handleCellDoubleClick(transaction.id, field, transaction[field])}
       >
         {displayValue}
       </div>
     );
   };
+
+  if (!company) {
+    return (
+      <div className="p-6 lg:p-8">
+        <Card className="p-8 text-center">
+          <AlertCircle className="h-12 w-12 mx-auto text-muted-foreground mb-4" />
+          <h2 className="text-xl font-semibold mb-2">Empresa não configurada</h2>
+          <p className="text-muted-foreground">
+            Configure sua empresa para acessar esta funcionalidade.
+          </p>
+        </Card>
+      </div>
+    );
+  }
 
   return (
     <div className="p-6 lg:p-8 space-y-6">
@@ -364,12 +386,14 @@ export default function Spreadsheet() {
             Visualize e edite transações em formato de planilha
           </p>
         </div>
-        <div className="flex gap-2">
-          <Button onClick={handleAddRow} className="gap-2">
-            <Plus className="h-4 w-4" />
-            Nova Linha
-          </Button>
-        </div>
+        {canEdit && (
+          <div className="flex gap-2">
+            <Button onClick={handleAddRow} className="gap-2">
+              <Plus className="h-4 w-4" />
+              Nova Linha
+            </Button>
+          </div>
+        )}
       </div>
 
       {/* Filters */}
@@ -439,19 +463,19 @@ export default function Spreadsheet() {
                 <TableHead className="text-right">Custo</TableHead>
                 <TableHead className="text-right">Lucro</TableHead>
                 <TableHead>Origem</TableHead>
-                <TableHead className="w-[60px]"></TableHead>
+                {canEdit && <TableHead className="w-[60px]"></TableHead>}
               </TableRow>
             </TableHeader>
             <TableBody>
               {loading ? (
                 <TableRow>
-                  <TableCell colSpan={10} className="text-center py-8 text-muted-foreground">
+                  <TableCell colSpan={canEdit ? 10 : 9} className="text-center py-8 text-muted-foreground">
                     Carregando...
                   </TableCell>
                 </TableRow>
               ) : filteredTransactions.length === 0 ? (
                 <TableRow>
-                  <TableCell colSpan={10} className="text-center py-8 text-muted-foreground">
+                  <TableCell colSpan={canEdit ? 10 : 9} className="text-center py-8 text-muted-foreground">
                     Nenhuma transação encontrada.
                   </TableCell>
                 </TableRow>
@@ -498,16 +522,10 @@ export default function Spreadsheet() {
                         'font-medium',
                         transaction.type === 'income' ? 'text-primary' : 'text-destructive'
                       )}>
-                        {transaction.type === 'income' ? '+' : '-'}
-                        {renderEditableCell(
-                          transaction,
-                          'amount',
-                          formatCurrency(transaction.amount),
-                          'number'
-                        )}
+                        {formatCurrency(transaction.amount)}
                       </span>
                     </TableCell>
-                    <TableCell className="text-right text-muted-foreground">
+                    <TableCell className="text-right">
                       {renderEditableCell(
                         transaction,
                         'tax_amount',
@@ -515,7 +533,7 @@ export default function Spreadsheet() {
                         'number'
                       )}
                     </TableCell>
-                    <TableCell className="text-right text-muted-foreground">
+                    <TableCell className="text-right">
                       {renderEditableCell(
                         transaction,
                         'product_cost',
@@ -524,28 +542,30 @@ export default function Spreadsheet() {
                       )}
                     </TableCell>
                     <TableCell className="text-right">
-                      <span className={cn(
-                        'font-medium',
-                        (transaction.profit || 0) >= 0 ? 'text-primary' : 'text-destructive'
-                      )}>
-                        {formatCurrency(transaction.profit)}
-                      </span>
+                      {renderEditableCell(
+                        transaction,
+                        'profit',
+                        formatCurrency(transaction.profit),
+                        'number'
+                      )}
                     </TableCell>
                     <TableCell>
-                      <span className="text-xs px-2 py-1 rounded bg-muted text-muted-foreground">
+                      <span className="text-sm text-muted-foreground">
                         {getOriginLabel(transaction.origin)}
                       </span>
                     </TableCell>
-                    <TableCell>
-                      <Button
-                        variant="ghost"
-                        size="icon"
-                        onClick={() => setDeleteId(transaction.id)}
-                        className="text-destructive hover:text-destructive"
-                      >
-                        <Trash2 className="h-4 w-4" />
-                      </Button>
-                    </TableCell>
+                    {canEdit && (
+                      <TableCell>
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          className="h-8 w-8 text-destructive hover:text-destructive"
+                          onClick={() => setDeleteId(transaction.id)}
+                        >
+                          <Trash2 className="h-4 w-4" />
+                        </Button>
+                      </TableCell>
+                    )}
                   </TableRow>
                 ))
               )}
@@ -554,54 +574,7 @@ export default function Spreadsheet() {
         </div>
       </Card>
 
-      {/* Summary */}
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-        <Card className="p-4 text-center">
-          <p className="text-sm text-muted-foreground">Total Receitas</p>
-          <p className="text-lg font-semibold text-primary">
-            {formatCurrency(
-              filteredTransactions
-                .filter(t => t.type === 'income')
-                .reduce((sum, t) => sum + t.amount, 0)
-            )}
-          </p>
-        </Card>
-        <Card className="p-4 text-center">
-          <p className="text-sm text-muted-foreground">Total Despesas</p>
-          <p className="text-lg font-semibold text-destructive">
-            {formatCurrency(
-              filteredTransactions
-                .filter(t => t.type === 'expense')
-                .reduce((sum, t) => sum + t.amount, 0)
-            )}
-          </p>
-        </Card>
-        <Card className="p-4 text-center">
-          <p className="text-sm text-muted-foreground">Total Impostos</p>
-          <p className="text-lg font-semibold text-warning">
-            {formatCurrency(
-              filteredTransactions.reduce((sum, t) => sum + (t.tax_amount || 0), 0)
-            )}
-          </p>
-        </Card>
-        <Card className="p-4 text-center">
-          <p className="text-sm text-muted-foreground">Saldo</p>
-          <p className={cn(
-            'text-lg font-semibold',
-            filteredTransactions.reduce((sum, t) => 
-              sum + (t.type === 'income' ? t.amount : -t.amount), 0
-            ) >= 0 ? 'text-primary' : 'text-destructive'
-          )}>
-            {formatCurrency(
-              filteredTransactions.reduce((sum, t) => 
-                sum + (t.type === 'income' ? t.amount : -t.amount), 0
-              )
-            )}
-          </p>
-        </Card>
-      </div>
-
-      {/* Delete Confirmation */}
+      {/* Delete Dialog */}
       <AlertDialog open={!!deleteId} onOpenChange={() => setDeleteId(null)}>
         <AlertDialogContent>
           <AlertDialogHeader>
@@ -612,10 +585,7 @@ export default function Spreadsheet() {
           </AlertDialogHeader>
           <AlertDialogFooter>
             <AlertDialogCancel>Cancelar</AlertDialogCancel>
-            <AlertDialogAction
-              onClick={handleDeleteRow}
-              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
-            >
+            <AlertDialogAction onClick={handleDeleteRow} className="bg-destructive text-destructive-foreground">
               Excluir
             </AlertDialogAction>
           </AlertDialogFooter>

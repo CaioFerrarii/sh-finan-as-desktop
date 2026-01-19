@@ -7,7 +7,19 @@ import { Label } from '@/components/ui/label';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { useToast } from '@/hooks/use-toast';
-import { Loader2, TrendingUp, Shield, BarChart3 } from 'lucide-react';
+import { 
+  Loader2, 
+  TrendingUp, 
+  Shield, 
+  BarChart3, 
+  CheckCircle2, 
+  Crown,
+  FileSpreadsheet,
+  Bell,
+  Users,
+  Wifi,
+  Store
+} from 'lucide-react';
 import { z } from 'zod';
 
 const loginSchema = z.object({
@@ -24,6 +36,17 @@ const signupSchema = z.object({
   message: "As senhas não coincidem",
   path: ["confirmPassword"],
 });
+
+const planFeatures = [
+  { icon: BarChart3, text: 'Dashboard em tempo real' },
+  { icon: FileSpreadsheet, text: 'Importação e exportação CSV/XLSX/PDF' },
+  { icon: TrendingUp, text: 'Relatórios completos (DRE, Fluxo de Caixa, Curva ABC)' },
+  { icon: Store, text: 'Integração com Marketplaces' },
+  { icon: Bell, text: 'Alertas e auditoria' },
+  { icon: Users, text: 'Múltiplos usuários por empresa' },
+  { icon: Wifi, text: 'Modo offline' },
+  { icon: Shield, text: 'Segurança total - seus dados isolados' },
+];
 
 export default function Auth() {
   const [isLoading, setIsLoading] = useState(false);
@@ -146,7 +169,7 @@ export default function Auth() {
   };
 
   return (
-    <div className="min-h-screen flex">
+    <div className="min-h-screen flex flex-col lg:flex-row">
       {/* Left side - Branding */}
       <div className="hidden lg:flex lg:w-1/2 gradient-bg p-12 flex-col justify-between">
         <div>
@@ -201,8 +224,8 @@ export default function Auth() {
         </p>
       </div>
       
-      {/* Right side - Auth form */}
-      <div className="flex-1 flex items-center justify-center p-8 bg-background">
+      {/* Right side - Auth form + Plan */}
+      <div className="flex-1 flex flex-col items-center justify-start p-8 bg-background overflow-y-auto">
         <div className="w-full max-w-md">
           <div className="lg:hidden mb-8 text-center">
             <h1 className="text-3xl font-display font-bold text-primary">
@@ -336,6 +359,57 @@ export default function Auth() {
               
               <p className="mt-6 text-center text-sm text-muted-foreground">
                 Apenas emails autorizados podem acessar o sistema.
+              </p>
+            </CardContent>
+          </Card>
+
+          {/* Subscription Plan Section */}
+          <Card className="mt-8 border-2 border-primary/20 shadow-lg overflow-hidden">
+            <div className="bg-gradient-to-r from-primary to-primary/80 p-6 text-primary-foreground">
+              <div className="flex items-center gap-3">
+                <Crown className="h-8 w-8" />
+                <div>
+                  <h2 className="text-2xl font-display font-bold">Plano SH Finanças Completo</h2>
+                  <p className="text-primary-foreground/80">Tudo que você precisa para sua gestão financeira</p>
+                </div>
+              </div>
+            </div>
+            <CardContent className="pt-6">
+              <div className="flex items-baseline gap-1 mb-6">
+                <span className="text-4xl font-bold text-foreground">R$ 99,90</span>
+                <span className="text-muted-foreground">/mês</span>
+              </div>
+
+              <div className="space-y-3 mb-6">
+                {planFeatures.map((feature, index) => (
+                  <div key={index} className="flex items-center gap-3">
+                    <CheckCircle2 className="h-5 w-5 text-green-500 flex-shrink-0" />
+                    <span className="text-sm text-foreground">{feature.text}</span>
+                  </div>
+                ))}
+              </div>
+
+              <div className="p-4 bg-muted rounded-lg mb-6">
+                <div className="flex items-center gap-2 text-sm">
+                  <Shield className="h-4 w-4 text-primary" />
+                  <span className="font-medium">Apenas a sua empresa acessa seus dados.</span>
+                </div>
+                <p className="text-xs text-muted-foreground mt-1">
+                  Segurança total com isolamento de dados por empresa.
+                </p>
+              </div>
+
+              <Button 
+                className="w-full gap-2" 
+                size="lg"
+                onClick={() => setActiveTab('signup')}
+              >
+                <Crown className="h-5 w-5" />
+                Assinar agora
+              </Button>
+
+              <p className="text-xs text-center text-muted-foreground mt-4">
+                Cancele a qualquer momento. Sem taxas escondidas.
               </p>
             </CardContent>
           </Card>

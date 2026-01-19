@@ -155,13 +155,13 @@ export function CompanyProvider({ children }: { children: ReactNode }) {
 
       if (roleError) throw roleError;
 
-      // Create subscription
+      // Create subscription with free plan (valor = 0)
       const { error: subError } = await supabase
         .from('subscriptions')
         .insert({
           company_id: companyData.id,
-          plano: 'unico',
-          valor: 99.90,
+          plano: 'Plano SH Completo',
+          valor: 0,
           status: 'ativo',
         });
 

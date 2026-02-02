@@ -1,7 +1,6 @@
 import { Navigate, Outlet } from 'react-router-dom';
 import { useAuth } from '@/hooks/useAuth';
 import { useCompany } from '@/hooks/useCompany';
-import { CompanySetup } from '@/components/company/CompanySetup';
 import { SubscriptionBlocked } from '@/components/company/SubscriptionBlocked';
 import { Loader2 } from 'lucide-react';
 
@@ -38,9 +37,9 @@ export function ProtectedRoute() {
     );
   }
 
-  // Show company setup if user doesn't have a company
+  // Redirect to auth if user doesn't have a company (need to subscribe)
   if (!company) {
-    return <CompanySetup />;
+    return <Navigate to="/auth" replace />;
   }
 
   // Block access if subscription is not active

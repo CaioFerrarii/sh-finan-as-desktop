@@ -41,8 +41,16 @@ interface CompanyContextType {
   isFinanceiro: boolean;
   canEdit: boolean;
   isSubscriptionActive: boolean;
-  createCompany: (name: string, document?: string) => Promise<{ error: Error | null; company: Company | null }>;
+  createCompany: (data: CreateCompanyData) => Promise<{ error: Error | null; company: Company | null }>;
   refreshCompany: () => Promise<void>;
+}
+
+interface CreateCompanyData {
+  name: string;
+  document: string;
+  email?: string;
+  phone?: string;
+  address?: string;
 }
 
 const CompanyContext = createContext<CompanyContextType | undefined>(undefined);
@@ -126,18 +134,21 @@ export function CompanyProvider({ children }: { children: ReactNode }) {
     }
   };
 
-  const createCompany = async (name: string, document?: string): Promise<{ error: Error | null; company: Company | null }> => {
+  const createCompany = async (data: CreateCompanyData): Promise<{ error: Error | null; company: Company | null }> => {
     if (!user) {
       return { error: new Error('Usuário não autenticado'), company: null };
     }
 
     try {
-      // Create company
+      // Create company with all data
       const { data: companyData, error: companyError } = await supabase
         .from('companies')
         .insert({
-          name,
-          document: document || null,
+          name: data.name,
+          document: data.document || null,
+          email: data.email || null,
+          phone: data.phone || null,
+          address: data.address || null,
         })
         .select()
         .single();

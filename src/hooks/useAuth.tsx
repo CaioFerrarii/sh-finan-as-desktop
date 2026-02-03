@@ -40,27 +40,14 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, []);
 
   const isAuthorizedEmail = async (email: string): Promise<boolean> => {
-    const { data, error } = await supabase
-      .from('authorized_emails')
-      .select('email')
-      .eq('email', email.toLowerCase())
-      .maybeSingle();
-    
-    if (error) {
-      console.error('Error checking authorized email:', error);
-      return false;
-    }
-    
-    return !!data;
+    // Acesso liberado para todos os emails por enquanto.
+    // Mantemos esta função para reativar a lista de emails autorizados no futuro,
+    // sem precisar refatorar a camada de autenticação.
+    void email;
+    return true;
   };
 
   const signIn = async (email: string, password: string) => {
-    // Check if email is authorized
-    const isAuthorized = await isAuthorizedEmail(email);
-    if (!isAuthorized) {
-      return { error: new Error('Este email não está autorizado a acessar o sistema.') };
-    }
-
     const { error } = await supabase.auth.signInWithPassword({
       email,
       password,
@@ -69,12 +56,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   };
 
   const signUp = async (email: string, password: string, fullName?: string) => {
-    // Check if email is authorized
-    const isAuthorized = await isAuthorizedEmail(email);
-    if (!isAuthorized) {
-      return { error: new Error('Este email não está autorizado a acessar o sistema.') };
-    }
-
     const redirectUrl = `${window.location.origin}/`;
     
     const { error } = await supabase.auth.signUp({

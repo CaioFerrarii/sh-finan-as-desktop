@@ -2,6 +2,8 @@ import { useState, useEffect, createContext, useContext, ReactNode } from 'react
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/hooks/useAuth';
 
+const PENDING_COMPANY_BOOTSTRAP_KEY = 'pending_company_bootstrap_v1';
+
 interface Company {
   id: string;
   name: string;
@@ -53,6 +55,15 @@ interface CreateCompanyData {
   address?: string;
 }
 
+type PendingCompanyBootstrap = {
+  fullName?: string;
+  companyName: string;
+  document: string;
+  companyEmail?: string;
+  companyPhone?: string;
+  address?: string;
+};
+
 const CompanyContext = createContext<CompanyContextType | undefined>(undefined);
 
 export function CompanyProvider({ children }: { children: ReactNode }) {
@@ -86,8 +97,40 @@ export function CompanyProvider({ children }: { children: ReactNode }) {
     setError(null);
 
     try {
+      const readPendingBootstrap = (): PendingCompanyBootstrap | null => {
+        try {
+          const raw = localStorage.getItem(PENDING_COMPANY_BOOTSTRAP_KEY);
+          if (!raw) return null;
+          return JSON.parse(raw) as PendingCompanyBootstrap;
+        } catch {
+          return null;
+        }
+      };
+
+      const tryBootstrapFromPending = async (): Promise<boolean> => {
+        const pending = readPendingBootstrap();
+        if (!pending) return false;
+
+        const { error: rpcError } = await supabase.rpc('bootstrap_user_company', {
+          company_name: pending.companyName,
+          company_document: pending.document,
+          company_email: pending.companyEmail ?? null,
+          company_phone: pending.companyPhone ?? null,
+          company_address: pending.address ?? null,
+          profile_full_name: pending.fullName ?? null,
+        });
+
+        if (rpcError) {
+          console.error('Erro no bootstrap_user_company:', rpcError);
+          throw rpcError;
+        }
+
+        localStorage.removeItem(PENDING_COMPANY_BOOTSTRAP_KEY);
+        return true;
+      };
+
       // Fetch user's role and company
-      const { data: roleData, error: roleError } = await supabase
+      let { data: roleData, error: roleError } = await supabase
         .from('user_roles')
         .select('*')
         .eq('user_id', user.id)
@@ -96,12 +139,33 @@ export function CompanyProvider({ children }: { children: ReactNode }) {
       if (roleError) throw roleError;
 
       if (!roleData) {
-        // User doesn't have a company yet
-        setCompany(null);
-        setUserRole(null);
-        setSubscription(null);
-        setLoading(false);
-        return;
+        // If we have pending subscription/company data, bootstrap automatically via RPC
+        try {
+          const didBootstrap = await tryBootstrapFromPending();
+          if (didBootstrap) {
+            const res = await supabase
+              .from('user_roles')
+              .select('*')
+              .eq('user_id', user.id)
+              .maybeSingle();
+
+            roleData = res.data;
+            roleError = res.error;
+            if (roleError) throw roleError;
+          }
+        } catch (bootstrapErr: any) {
+          // If bootstrap fails, fall back to “no company” state
+          console.error('Falha ao bootstrapar empresa:', bootstrapErr);
+        }
+
+        if (!roleData) {
+          // User doesn't have a company yet
+          setCompany(null);
+          setUserRole(null);
+          setSubscription(null);
+          setLoading(false);
+          return;
+        }
       }
 
       setUserRole(roleData as UserRole);
@@ -140,54 +204,29 @@ export function CompanyProvider({ children }: { children: ReactNode }) {
     }
 
     try {
-      // Create company with all data
-      const { data: companyData, error: companyError } = await supabase
-        .from('companies')
-        .insert({
-          name: data.name,
-          document: data.document || null,
-          email: data.email || null,
-          phone: data.phone || null,
-          address: data.address || null,
-        })
-        .select()
-        .single();
+      // Use the unified bootstrap RPC (avoids RLS edge-cases and keeps the flow stable)
+      const { data: companyId, error: rpcError } = await supabase.rpc('bootstrap_user_company', {
+        company_name: data.name,
+        company_document: data.document,
+        company_email: data.email ?? null,
+        company_phone: data.phone ?? null,
+        company_address: data.address ?? null,
+        profile_full_name: null,
+      });
 
-      if (companyError) throw companyError;
-
-      // Create user role as admin
-      const { error: roleError } = await supabase
-        .from('user_roles')
-        .insert({
-          user_id: user.id,
-          company_id: companyData.id,
-          role: 'admin',
-        });
-
-      if (roleError) throw roleError;
-
-      // Create subscription with free plan (valor = 0)
-      const { error: subError } = await supabase
-        .from('subscriptions')
-        .insert({
-          company_id: companyData.id,
-          plano: 'Plano SH Completo',
-          valor: 0,
-          status: 'ativo',
-        });
-
-      if (subError) throw subError;
-
-      // Update profile with company_id
-      const { error: profileError } = await supabase
-        .from('profiles')
-        .update({ company_id: companyData.id })
-        .eq('user_id', user.id);
-
-      if (profileError) console.error('Error updating profile:', profileError);
+      if (rpcError) throw rpcError;
 
       // Refresh data
       await fetchCompanyData();
+
+      // Fetch company to return
+      const { data: companyData, error: companyError } = await supabase
+        .from('companies')
+        .select('*')
+        .eq('id', companyId as any)
+        .single();
+
+      if (companyError) throw companyError;
 
       return { error: null, company: companyData as Company };
     } catch (err: any) {

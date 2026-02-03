@@ -570,6 +570,17 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
+      bootstrap_user_company: {
+        Args: {
+          company_address?: string
+          company_document: string
+          company_email?: string
+          company_name: string
+          company_phone?: string
+          profile_full_name?: string
+        }
+        Returns: string
+      }
       get_user_company_id: { Args: never; Returns: string }
       has_role: {
         Args: { _role: Database["public"]["Enums"]["app_role"] }

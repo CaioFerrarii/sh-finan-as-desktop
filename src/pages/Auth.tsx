@@ -63,6 +63,8 @@ const planFeatures = [
 
 type ViewMode = 'welcome' | 'login' | 'subscribe';
 
+const PENDING_COMPANY_BOOTSTRAP_KEY = 'pending_company_bootstrap_v1';
+
 export default function Auth() {
   const [isLoading, setIsLoading] = useState(false);
   const [viewMode, setViewMode] = useState<ViewMode>('welcome');
@@ -192,24 +194,59 @@ export default function Auth() {
         return;
       }
 
+      // Salva os dados da empresa localmente para completar o bootstrap após o login
+      // (não salvamos senha aqui)
+      localStorage.setItem(PENDING_COMPANY_BOOTSTRAP_KEY, JSON.stringify({
+        fullName,
+        companyName,
+        document,
+        companyEmail: companyEmail || undefined,
+        companyPhone: companyPhone || undefined,
+        address: address || undefined,
+      }));
+
       // 1. Criar conta do usuário
       const { error: signUpError } = await signUp(email, password, fullName);
       
       if (signUpError) {
-        let errorMessage = signUpError.message;
-        if (signUpError.message.includes('already registered')) {
-          errorMessage = 'Este email já está cadastrado. Faça login.';
+        // Se o usuário já existe, tentamos entrar e continuar a assinatura
+        if (signUpError.message?.includes('already registered')) {
+          const { error: loginError } = await signIn(email, password);
+          if (loginError) {
+            toast({
+              title: 'Conta já existe',
+              description: 'Este email já está cadastrado. Entre para concluir a assinatura.',
+              variant: 'destructive',
+            });
+            setViewMode('login');
+            setIsLoading(false);
+            return;
+          }
+        } else {
+          toast({
+            title: 'Erro ao criar conta',
+            description: signUpError.message,
+            variant: 'destructive',
+          });
+          setIsLoading(false);
+          return;
         }
-        toast({
-          title: 'Erro ao criar conta',
-          description: errorMessage,
-          variant: 'destructive',
-        });
-        setIsLoading(false);
-        return;
+      } else {
+        // Em muitos setups, o cadastro não cria sessão automaticamente.
+        // Tentamos entrar para conseguir executar o bootstrap da empresa.
+        const { error: loginError } = await signIn(email, password);
+        if (loginError) {
+          toast({
+            title: 'Conta criada!',
+            description: 'Agora faça login para concluir a assinatura e cadastrar sua empresa.',
+          });
+          setViewMode('login');
+          setIsLoading(false);
+          return;
+        }
       }
 
-      // 2. Criar empresa com todos os dados
+      // 2. Criar empresa (via RPC unificado dentro do hook)
       const { error: companyError } = await createCompany({
         name: companyName,
         document: document,
@@ -217,16 +254,18 @@ export default function Auth() {
         phone: companyPhone || undefined,
         address: address || undefined,
       });
-      
+
       if (companyError) {
         toast({
-          title: 'Erro ao criar empresa',
-          description: companyError.message || 'Não foi possível criar a empresa.',
+          title: 'Erro ao concluir assinatura',
+          description: companyError.message || 'Não foi possível cadastrar sua empresa.',
           variant: 'destructive',
         });
         setIsLoading(false);
         return;
       }
+
+      localStorage.removeItem(PENDING_COMPANY_BOOTSTRAP_KEY);
 
       toast({
         title: 'Assinatura realizada!',

@@ -592,6 +592,16 @@ export type Database = {
         Args: { _company_id: string }
         Returns: boolean
       }
+      log_audit_event: {
+        Args: {
+          p_action: string
+          p_new_data?: Json
+          p_old_data?: Json
+          p_record_id: string
+          p_table_name: string
+        }
+        Returns: string
+      }
     }
     Enums: {
       app_role: "admin" | "financeiro" | "leitura"

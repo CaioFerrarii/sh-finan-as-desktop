@@ -567,7 +567,131 @@ export type Database = {
       }
     }
     Views: {
-      [_ in never]: never
+      api_connections_decrypted: {
+        Row: {
+          access_token: string | null
+          api_key: string | null
+          api_secret: string | null
+          company_id: string | null
+          created_at: string | null
+          id: string | null
+          is_active: boolean | null
+          last_sync_at: string | null
+          platform: string | null
+          updated_at: string | null
+          user_id: string | null
+        }
+        Insert: {
+          access_token?: never
+          api_key?: never
+          api_secret?: never
+          company_id?: string | null
+          created_at?: string | null
+          id?: string | null
+          is_active?: boolean | null
+          last_sync_at?: string | null
+          platform?: string | null
+          updated_at?: string | null
+          user_id?: string | null
+        }
+        Update: {
+          access_token?: never
+          api_key?: never
+          api_secret?: never
+          company_id?: string | null
+          created_at?: string | null
+          id?: string | null
+          is_active?: boolean | null
+          last_sync_at?: string | null
+          platform?: string | null
+          updated_at?: string | null
+          user_id?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "api_connections_company_id_fkey"
+            columns: ["company_id"]
+            isOneToOne: false
+            referencedRelation: "companies"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      transactions_safe: {
+        Row: {
+          amount: number | null
+          category_id: string | null
+          company_id: string | null
+          created_at: string | null
+          date: string | null
+          description: string | null
+          id: string | null
+          notes: string | null
+          origin: string | null
+          product_cost: number | null
+          profit: number | null
+          source: string | null
+          subcategory: string | null
+          tax_amount: number | null
+          type: string | null
+          updated_at: string | null
+          user_id: string | null
+        }
+        Insert: {
+          amount?: number | null
+          category_id?: string | null
+          company_id?: string | null
+          created_at?: string | null
+          date?: string | null
+          description?: string | null
+          id?: string | null
+          notes?: string | null
+          origin?: string | null
+          product_cost?: never
+          profit?: never
+          source?: string | null
+          subcategory?: string | null
+          tax_amount?: never
+          type?: string | null
+          updated_at?: string | null
+          user_id?: string | null
+        }
+        Update: {
+          amount?: number | null
+          category_id?: string | null
+          company_id?: string | null
+          created_at?: string | null
+          date?: string | null
+          description?: string | null
+          id?: string | null
+          notes?: string | null
+          origin?: string | null
+          product_cost?: never
+          profit?: never
+          source?: string | null
+          subcategory?: string | null
+          tax_amount?: never
+          type?: string | null
+          updated_at?: string | null
+          user_id?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "transactions_category_id_fkey"
+            columns: ["category_id"]
+            isOneToOne: false
+            referencedRelation: "categories"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "transactions_company_id_fkey"
+            columns: ["company_id"]
+            isOneToOne: false
+            referencedRelation: "companies"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
     }
     Functions: {
       bootstrap_user_company: {
@@ -579,6 +703,14 @@ export type Database = {
           company_phone?: string
           profile_full_name?: string
         }
+        Returns: string
+      }
+      decrypt_api_credential: {
+        Args: { p_ciphertext: string; p_user_id: string }
+        Returns: string
+      }
+      encrypt_api_credential: {
+        Args: { p_plaintext: string; p_user_id: string }
         Returns: string
       }
       get_user_company_id: { Args: never; Returns: string }

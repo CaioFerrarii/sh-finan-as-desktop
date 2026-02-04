@@ -121,7 +121,6 @@ export function CompanyProvider({ children }: { children: ReactNode }) {
         });
 
         if (rpcError) {
-          console.error('Erro no bootstrap_user_company:', rpcError);
           throw rpcError;
         }
 
@@ -153,9 +152,8 @@ export function CompanyProvider({ children }: { children: ReactNode }) {
             roleError = res.error;
             if (roleError) throw roleError;
           }
-        } catch (bootstrapErr: any) {
-          // If bootstrap fails, fall back to “no company” state
-          console.error('Falha ao bootstrapar empresa:', bootstrapErr);
+        } catch {
+          // Se bootstrap falha, permanece no estado sem empresa
         }
 
         if (!roleData) {
@@ -190,9 +188,9 @@ export function CompanyProvider({ children }: { children: ReactNode }) {
       if (subError) throw subError;
       setSubscription(subData as Subscription | null);
 
-    } catch (err: any) {
-      console.error('Error fetching company data:', err);
-      setError(err.message);
+    } catch (err: unknown) {
+      const errorMessage = err instanceof Error ? err.message : 'Erro ao carregar dados da empresa';
+      setError(errorMessage);
     } finally {
       setLoading(false);
     }
@@ -223,15 +221,15 @@ export function CompanyProvider({ children }: { children: ReactNode }) {
       const { data: companyData, error: companyError } = await supabase
         .from('companies')
         .select('*')
-        .eq('id', companyId as any)
+        .eq('id', companyId as string)
         .single();
 
       if (companyError) throw companyError;
 
       return { error: null, company: companyData as Company };
-    } catch (err: any) {
-      console.error('Error creating company:', err);
-      return { error: err, company: null };
+    } catch (err: unknown) {
+      const error = err instanceof Error ? err : new Error('Erro ao criar empresa');
+      return { error, company: null };
     }
   };
 

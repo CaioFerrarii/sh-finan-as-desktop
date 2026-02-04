@@ -22,33 +22,7 @@ import {
   Building2,
   ArrowLeft
 } from 'lucide-react';
-import { z } from 'zod';
-
-// Schema para login
-const loginSchema = z.object({
-  email: z.string().email('Email inválido'),
-  password: z.string().min(6, 'A senha deve ter pelo menos 6 caracteres'),
-});
-
-// Schema para assinatura completa (cadastro + empresa)
-const subscriptionSchema = z.object({
-  // Dados do responsável
-  fullName: z.string().min(2, 'Nome deve ter pelo menos 2 caracteres'),
-  email: z.string().email('Email inválido'),
-  password: z.string().min(6, 'A senha deve ter pelo menos 6 caracteres'),
-  confirmPassword: z.string(),
-  phone: z.string().optional(),
-  
-  // Dados da empresa
-  companyName: z.string().min(2, 'Nome da empresa é obrigatório'),
-  document: z.string().min(14, 'CNPJ inválido'),
-  companyEmail: z.string().optional(),
-  companyPhone: z.string().optional(),
-  address: z.string().optional(),
-}).refine((data) => data.password === data.confirmPassword, {
-  message: "As senhas não coincidem",
-  path: ["confirmPassword"],
-});
+import { loginSchema, subscriptionFormSchema } from '@/lib/validators';
 
 const planFeatures = [
   { icon: BarChart3, text: 'Dashboard em tempo real' },
@@ -171,23 +145,24 @@ export default function Auth() {
     setIsLoading(true);
 
     try {
-      const validation = subscriptionSchema.safeParse({ 
+      const validation = subscriptionFormSchema.safeParse({ 
         fullName,
         email, 
         password,
         confirmPassword,
-        phone,
+        phone: phone || undefined,
         companyName,
         document,
-        companyEmail,
-        companyPhone,
-        address,
+        companyEmail: companyEmail || undefined,
+        companyPhone: companyPhone || undefined,
+        address: address || undefined,
       });
       
       if (!validation.success) {
+        const errorMessages = validation.error.errors.map(e => e.message).join(', ');
         toast({
           title: 'Erro de validação',
-          description: validation.error.errors[0].message,
+          description: errorMessages,
           variant: 'destructive',
         });
         setIsLoading(false);

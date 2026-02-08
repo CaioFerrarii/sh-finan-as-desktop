@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '@/hooks/useAuth';
 import { useCompany } from '@/hooks/useCompany';
+import { supabase } from '@/integrations/supabase/client';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -20,7 +21,9 @@ import {
   Wifi,
   Store,
   Building2,
-  ArrowLeft
+  ArrowLeft,
+  Mail,
+  CheckCircle2 as CheckCircleIcon
 } from 'lucide-react';
 import { loginSchema, subscriptionFormSchema } from '@/lib/validators';
 
@@ -35,7 +38,7 @@ const planFeatures = [
   { icon: Shield, text: 'Segurança total - seus dados isolados' },
 ];
 
-type ViewMode = 'welcome' | 'login' | 'subscribe';
+type ViewMode = 'welcome' | 'login' | 'subscribe' | 'forgot-password';
 
 const PENDING_COMPANY_BOOTSTRAP_KEY = 'pending_company_bootstrap_v1';
 
@@ -46,6 +49,10 @@ export default function Auth() {
   // Login form
   const [loginEmail, setLoginEmail] = useState('');
   const [loginPassword, setLoginPassword] = useState('');
+  
+  // Forgot password form
+  const [forgotEmail, setForgotEmail] = useState('');
+  const [forgotEmailSent, setForgotEmailSent] = useState(false);
   
   // Subscription form - Dados do responsável
   const [fullName, setFullName] = useState('');
@@ -128,6 +135,39 @@ export default function Auth() {
           description: 'Login realizado com sucesso.',
         });
         navigate('/dashboard');
+      }
+    } catch (error) {
+      toast({
+        title: 'Erro',
+        description: 'Ocorreu um erro inesperado.',
+        variant: 'destructive',
+      });
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const handleForgotPassword = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setIsLoading(true);
+
+    try {
+      const { error } = await supabase.auth.resetPasswordForEmail(forgotEmail, {
+        redirectTo: `${window.location.origin}/reset-password`,
+      });
+
+      if (error) {
+        toast({
+          title: 'Erro ao enviar email',
+          description: error.message,
+          variant: 'destructive',
+        });
+      } else {
+        setForgotEmailSent(true);
+        toast({
+          title: 'Email enviado!',
+          description: 'Verifique sua caixa de entrada para redefinir sua senha.',
+        });
       }
     } catch (error) {
       toast({
@@ -484,6 +524,21 @@ export default function Auth() {
                       disabled={isLoading}
                     />
                   </div>
+                  
+                  <div className="text-right">
+                    <button 
+                      type="button"
+                      className="text-sm text-primary hover:underline"
+                      onClick={() => {
+                        setForgotEmail(loginEmail);
+                        setForgotEmailSent(false);
+                        setViewMode('forgot-password');
+                      }}
+                    >
+                      Esqueci minha senha
+                    </button>
+                  </div>
+                  
                   <Button type="submit" className="w-full" disabled={isLoading}>
                     {isLoading ? (
                       <>
@@ -504,6 +559,135 @@ export default function Auth() {
                       onClick={() => setViewMode('subscribe')}
                     >
                       Assine agora
+                    </button>
+                  </p>
+                </div>
+              </CardContent>
+            </Card>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  // Forgot password view
+  if (viewMode === 'forgot-password') {
+    return (
+      <div className="min-h-screen flex flex-col lg:flex-row">
+        {/* Left side - Branding */}
+        <div className="hidden lg:flex lg:w-1/2 gradient-bg p-12 flex-col justify-between">
+          <div>
+            <h1 className="text-4xl font-display font-bold text-primary-foreground">
+              SH Finanças
+            </h1>
+            <p className="mt-2 text-primary-foreground/80">
+              Gestão financeira inteligente
+            </p>
+          </div>
+          
+          <div className="space-y-8">
+            <div className="flex items-start gap-4">
+              <div className="p-3 rounded-lg bg-primary-foreground/10">
+                <Mail className="h-6 w-6 text-primary-foreground" />
+              </div>
+              <div>
+                <h3 className="font-semibold text-primary-foreground">Recuperação de Senha</h3>
+                <p className="text-sm text-primary-foreground/70">
+                  Enviaremos um link para você redefinir sua senha
+                </p>
+              </div>
+            </div>
+          </div>
+          
+          <p className="text-sm text-primary-foreground/60">
+            © 2024 SH Finanças. Todos os direitos reservados.
+          </p>
+        </div>
+        
+        {/* Right side - Forgot password form */}
+        <div className="flex-1 flex flex-col items-center justify-center p-8 bg-background">
+          <div className="w-full max-w-md">
+            <Button 
+              variant="ghost" 
+              className="mb-6"
+              onClick={() => setViewMode('login')}
+            >
+              <ArrowLeft className="mr-2 h-4 w-4" />
+              Voltar para login
+            </Button>
+
+            <Card className="border-0 shadow-lg">
+              <CardHeader className="space-y-1 pb-4 text-center">
+                <div className="mx-auto mb-4 p-4 rounded-full bg-primary/10">
+                  <Mail className="h-8 w-8 text-primary" />
+                </div>
+                <CardTitle className="text-2xl font-display">Esqueci minha senha</CardTitle>
+                <CardDescription>
+                  {forgotEmailSent 
+                    ? 'Verifique sua caixa de entrada' 
+                    : 'Digite seu email para receber o link de recuperação'}
+                </CardDescription>
+              </CardHeader>
+              <CardContent>
+                {forgotEmailSent ? (
+                  <div className="text-center space-y-4">
+                    <div className="mx-auto p-4 rounded-full bg-accent w-fit">
+                      <CheckCircleIcon className="h-8 w-8 text-accent-foreground" />
+                    </div>
+                    <p className="text-sm text-muted-foreground">
+                      Enviamos um email para <strong>{forgotEmail}</strong> com as instruções para redefinir sua senha.
+                    </p>
+                    <p className="text-xs text-muted-foreground">
+                      Não recebeu? Verifique sua pasta de spam ou{' '}
+                      <button 
+                        className="text-primary hover:underline"
+                        onClick={() => setForgotEmailSent(false)}
+                      >
+                        tente novamente
+                      </button>
+                    </p>
+                    <Button 
+                      className="w-full mt-4" 
+                      onClick={() => setViewMode('login')}
+                    >
+                      Voltar para login
+                    </Button>
+                  </div>
+                ) : (
+                  <form onSubmit={handleForgotPassword} className="space-y-4">
+                    <div className="space-y-2">
+                      <Label htmlFor="forgot-email">Email</Label>
+                      <Input
+                        id="forgot-email"
+                        type="email"
+                        placeholder="seu@email.com"
+                        value={forgotEmail}
+                        onChange={(e) => setForgotEmail(e.target.value)}
+                        required
+                        disabled={isLoading}
+                      />
+                    </div>
+                    <Button type="submit" className="w-full" disabled={isLoading}>
+                      {isLoading ? (
+                        <>
+                          <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                          Enviando...
+                        </>
+                      ) : (
+                        'Enviar link de recuperação'
+                      )}
+                    </Button>
+                  </form>
+                )}
+
+                <div className="mt-6 text-center">
+                  <p className="text-sm text-muted-foreground">
+                    Lembrou sua senha?{' '}
+                    <button 
+                      className="text-primary hover:underline font-medium"
+                      onClick={() => setViewMode('login')}
+                    >
+                      Entrar
                     </button>
                   </p>
                 </div>

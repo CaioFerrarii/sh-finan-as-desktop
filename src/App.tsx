@@ -19,6 +19,7 @@ import Settings from "./pages/Settings";
 import Spreadsheet from "./pages/Spreadsheet";
 import Alerts from "./pages/Alerts";
 import NotFound from "./pages/NotFound";
+import ResetPassword from "./pages/ResetPassword";
 
 const queryClient = new QueryClient();
 
@@ -33,6 +34,7 @@ const App = () => (
             <Routes>
               <Route path="/" element={<Index />} />
               <Route path="/auth" element={<Auth />} />
+              <Route path="/reset-password" element={<ResetPassword />} />
               
               {/* Protected Routes */}
               <Route element={<ProtectedRoute />}>

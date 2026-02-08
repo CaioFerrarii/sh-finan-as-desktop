@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { supabase } from '@/integrations/supabase/client';
 import { Button } from '@/components/ui/button';
@@ -6,7 +6,20 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { useToast } from '@/hooks/use-toast';
-import { Loader2, Lock, CheckCircle2, ArrowLeft } from 'lucide-react';
+import { Loader2, Lock, CheckCircle2, ArrowLeft, Check, X } from 'lucide-react';
+import { passwordSchema } from '@/lib/validators';
+
+interface PasswordRequirement {
+  label: string;
+  test: (password: string) => boolean;
+}
+
+const passwordRequirements: PasswordRequirement[] = [
+  { label: 'Mínimo 8 caracteres', test: (p) => p.length >= 8 },
+  { label: 'Uma letra maiúscula', test: (p) => /[A-Z]/.test(p) },
+  { label: 'Uma letra minúscula', test: (p) => /[a-z]/.test(p) },
+  { label: 'Um número', test: (p) => /[0-9]/.test(p) },
+];
 
 export default function ResetPassword() {
   const [password, setPassword] = useState('');
@@ -18,6 +31,20 @@ export default function ResetPassword() {
   
   const navigate = useNavigate();
   const { toast } = useToast();
+
+  const passwordValidation = useMemo(() => {
+    const result = passwordSchema.safeParse(password);
+    return {
+      isValid: result.success,
+      requirements: passwordRequirements.map(req => ({
+        ...req,
+        met: req.test(password),
+      })),
+    };
+  }, [password]);
+
+  const passwordsMatch = password === confirmPassword && confirmPassword.length > 0;
+  const canSubmit = passwordValidation.isValid && passwordsMatch;
 
   useEffect(() => {
     // Check if we have a valid recovery session
@@ -52,7 +79,7 @@ export default function ResetPassword() {
   const handleResetPassword = async (e: React.FormEvent) => {
     e.preventDefault();
     
-    if (password !== confirmPassword) {
+    if (!passwordsMatch) {
       toast({
         title: 'Erro',
         description: 'As senhas não coincidem.',
@@ -61,10 +88,11 @@ export default function ResetPassword() {
       return;
     }
 
-    if (password.length < 6) {
+    const validation = passwordSchema.safeParse(password);
+    if (!validation.success) {
       toast({
-        title: 'Erro',
-        description: 'A senha deve ter pelo menos 6 caracteres.',
+        title: 'Senha inválida',
+        description: validation.error.errors[0].message,
         variant: 'destructive',
       });
       return;
@@ -180,9 +208,30 @@ export default function ResetPassword() {
                 onChange={(e) => setPassword(e.target.value)}
                 required
                 disabled={isLoading}
-                minLength={6}
               />
+              
+              {/* Password strength indicator */}
+              {password.length > 0 && (
+                <div className="mt-3 p-3 rounded-lg bg-muted/50 space-y-2">
+                  <p className="text-xs font-medium text-muted-foreground mb-2">
+                    Requisitos da senha:
+                  </p>
+                  {passwordValidation.requirements.map((req, index) => (
+                    <div key={index} className="flex items-center gap-2 text-xs">
+                      {req.met ? (
+                        <Check className="h-3.5 w-3.5 text-primary" />
+                      ) : (
+                        <X className="h-3.5 w-3.5 text-muted-foreground" />
+                      )}
+                      <span className={req.met ? 'text-foreground' : 'text-muted-foreground'}>
+                        {req.label}
+                      </span>
+                    </div>
+                  ))}
+                </div>
+              )}
             </div>
+            
             <div className="space-y-2">
               <Label htmlFor="confirmPassword">Confirmar Nova Senha</Label>
               <Input
@@ -193,10 +242,31 @@ export default function ResetPassword() {
                 onChange={(e) => setConfirmPassword(e.target.value)}
                 required
                 disabled={isLoading}
-                minLength={6}
               />
+              
+              {/* Password match indicator */}
+              {confirmPassword.length > 0 && (
+                <div className="flex items-center gap-2 text-xs mt-1">
+                  {passwordsMatch ? (
+                    <>
+                      <Check className="h-3.5 w-3.5 text-primary" />
+                      <span className="text-foreground">As senhas coincidem</span>
+                    </>
+                  ) : (
+                    <>
+                      <X className="h-3.5 w-3.5 text-destructive" />
+                      <span className="text-destructive">As senhas não coincidem</span>
+                    </>
+                  )}
+                </div>
+              )}
             </div>
-            <Button type="submit" className="w-full" disabled={isLoading}>
+            
+            <Button 
+              type="submit" 
+              className="w-full" 
+              disabled={isLoading || !canSubmit}
+            >
               {isLoading ? (
                 <>
                   <Loader2 className="mr-2 h-4 w-4 animate-spin" />

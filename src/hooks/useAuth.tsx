@@ -2,6 +2,7 @@ import { useState, useEffect, createContext, useContext, ReactNode, useCallback 
 import { User, Session } from '@supabase/supabase-js';
 import { supabase } from '@/integrations/supabase/client';
 import { useQueryClient } from '@tanstack/react-query';
+import { logSystemEvent } from '@/lib/systemEvents';
 
 interface AuthContextType {
   user: User | null;
@@ -43,6 +44,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         // Detectar troca de usuário — limpar tudo
         if (previousUserId && newUserId && previousUserId !== newUserId) {
           clearSessionState();
+          logSystemEvent({
+            event_type: 'company_switch',
+            description: 'Troca de usuário detectada — sessão limpa',
+            metadata: { previous_user: previousUserId, new_user: newUserId },
+          });
         }
 
         setSession(newSession);
@@ -66,6 +72,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         }
 
         if (event === 'SIGNED_OUT') {
+          logSystemEvent({
+            event_type: 'logout',
+            description: 'Usuário deslogou — sessão limpa',
+          });
           clearSessionState();
         }
       }

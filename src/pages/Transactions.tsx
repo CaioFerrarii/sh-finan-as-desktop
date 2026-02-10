@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/hooks/useAuth';
 import { useCompany } from '@/hooks/useCompany';
+import { useRequireCompany } from '@/hooks/useRequireCompany';
 import { useAudit } from '@/hooks/useAudit';
 import { useToast } from '@/hooks/use-toast';
 import { Button } from '@/components/ui/button';
@@ -57,6 +58,7 @@ interface Transaction {
 export default function Transactions() {
   const { user } = useAuth();
   const { company, canEdit, isAdmin } = useCompany();
+  const { companyId, isReady, requireCompany } = useRequireCompany();
   const { logAction } = useAudit();
   const { toast } = useToast();
   const [transactions, setTransactions] = useState<Transaction[]>([]);
@@ -80,31 +82,30 @@ export default function Transactions() {
   const [formNotes, setFormNotes] = useState('');
 
   useEffect(() => {
-    if (user && company) {
-      fetchData();
+    if (!isReady || !companyId) return;
+    
+    fetchData();
 
-      // Set up realtime subscription
-      const channel = supabase
-        .channel('transactions-realtime')
-        .on(
-          'postgres_changes',
-          {
-            event: '*',
-            schema: 'public',
-            table: 'transactions',
-            filter: `company_id=eq.${company.id}`,
-          },
-          () => {
-            fetchData();
-          }
-        )
-        .subscribe();
+    const channel = supabase
+      .channel('transactions-realtime')
+      .on(
+        'postgres_changes',
+        {
+          event: '*',
+          schema: 'public',
+          table: 'transactions',
+          filter: `company_id=eq.${companyId}`,
+        },
+        () => {
+          fetchData();
+        }
+      )
+      .subscribe();
 
-      return () => {
-        supabase.removeChannel(channel);
-      };
-    }
-  }, [user, company]);
+    return () => {
+      supabase.removeChannel(channel);
+    };
+  }, [isReady, companyId]);
 
   // Auto-categorize based on keywords
   useEffect(() => {
@@ -124,7 +125,7 @@ export default function Transactions() {
   }, [formDescription, categories]);
 
   const fetchData = async () => {
-    if (!company) return;
+    if (!companyId) return;
     
     try {
       const [transactionsRes, categoriesRes] = await Promise.all([
@@ -139,12 +140,12 @@ export default function Transactions() {
               keywords
             )
           `)
-          .eq('company_id', company.id)
+          .eq('company_id', companyId)
           .order('date', { ascending: false }),
         supabase
           .from('categories')
           .select('*')
-          .eq('company_id', company.id)
+          .eq('company_id', companyId)
           .order('name'),
       ]);
 
@@ -194,21 +195,22 @@ export default function Transactions() {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!company) return;
     
-    const transactionData = {
-      user_id: user?.id,
-      company_id: company.id,
-      description: formDescription,
-      amount: parseFloat(formAmount),
-      type: formType,
-      date: formDate,
-      category_id: formCategory || null,
-      source: formSource || null,
-      notes: formNotes || null,
-    };
-
     try {
+      const { companyId: cId, userId } = requireCompany();
+    
+      const transactionData = {
+        user_id: userId,
+        company_id: cId,
+        description: formDescription,
+        amount: parseFloat(formAmount),
+        type: formType,
+        date: formDate,
+        category_id: formCategory || null,
+        source: formSource || null,
+        notes: formNotes || null,
+      };
+
       if (editingTransaction) {
         const { error } = await supabase
           .from('transactions')

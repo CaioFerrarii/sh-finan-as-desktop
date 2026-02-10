@@ -28,6 +28,7 @@ import { Badge } from '@/components/ui/badge';
 import { useToast } from '@/hooks/use-toast';
 import { useAuth } from '@/hooks/useAuth';
 import { useCompany } from '@/hooks/useCompany';
+import { useRequireCompany } from '@/hooks/useRequireCompany';
 import { supabase } from '@/integrations/supabase/client';
 import { format } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
@@ -65,6 +66,7 @@ const ALERT_TYPES = {
 export default function Alerts() {
   const { user } = useAuth();
   const { company } = useCompany();
+  const { companyId, isReady } = useRequireCompany();
   const { toast } = useToast();
   
   const [alerts, setAlerts] = useState<Alert[]>([]);
@@ -75,14 +77,14 @@ export default function Alerts() {
   const [selectedAlert, setSelectedAlert] = useState<Alert | null>(null);
 
   useEffect(() => {
-    if (user && company) {
-      fetchAlerts();
-      setupRealtimeSubscription();
-    }
-  }, [user, company]);
+    if (!isReady || !companyId) return;
+    
+    fetchAlerts();
+    setupRealtimeSubscription();
+  }, [isReady, companyId]);
 
   const setupRealtimeSubscription = () => {
-    if (!company) return;
+    if (!companyId) return;
     
     const channel = supabase
       .channel('alerts-realtime')
@@ -92,7 +94,7 @@ export default function Alerts() {
           event: 'INSERT',
           schema: 'public',
           table: 'alerts',
-          filter: `company_id=eq.${company.id}`,
+          filter: `company_id=eq.${companyId}`,
         },
         (payload) => {
           setAlerts(prev => [payload.new as Alert, ...prev]);
@@ -106,13 +108,13 @@ export default function Alerts() {
   };
 
   const fetchAlerts = async () => {
-    if (!company) return;
+    if (!companyId) return;
     
     try {
       const { data, error } = await supabase
         .from('alerts')
         .select('*')
-        .eq('company_id', company.id)
+        .eq('company_id', companyId)
         .order('created_at', { ascending: false });
 
       if (error) throw error;

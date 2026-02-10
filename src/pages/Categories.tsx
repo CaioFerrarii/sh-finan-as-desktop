@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/hooks/useAuth';
 import { useCompany } from '@/hooks/useCompany';
+import { useRequireCompany } from '@/hooks/useRequireCompany';
 import { useToast } from '@/hooks/use-toast';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -37,6 +38,7 @@ const colorOptions = [
 export default function Categories() {
   const { user } = useAuth();
   const { company, canEdit } = useCompany();
+  const { companyId, isReady, requireCompany } = useRequireCompany();
   const { toast } = useToast();
   const [categories, setCategories] = useState<Category[]>([]);
   const [loading, setLoading] = useState(true);
@@ -49,19 +51,19 @@ export default function Categories() {
   const [formKeywords, setFormKeywords] = useState('');
 
   useEffect(() => {
-    if (user && company) {
+    if (isReady && companyId) {
       fetchCategories();
     }
-  }, [user, company]);
+  }, [isReady, companyId]);
 
   const fetchCategories = async () => {
-    if (!company) return;
+    if (!companyId) return;
     
     try {
       const { data, error } = await supabase
         .from('categories')
         .select('*')
-        .eq('company_id', company.id)
+        .eq('company_id', companyId)
         .order('name');
 
       if (error) throw error;
@@ -95,22 +97,22 @@ export default function Categories() {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!company || !user) return;
+    try {
+      const { companyId: cId, userId } = requireCompany();
     
     const keywordsArray = formKeywords
       .split(',')
       .map(k => k.trim())
       .filter(k => k.length > 0);
 
-    const categoryData = {
-      user_id: user.id,
-      company_id: company.id,
-      name: formName,
-      color: formColor,
-      keywords: keywordsArray,
-    };
+      const categoryData = {
+        user_id: userId,
+        company_id: cId,
+        name: formName,
+        color: formColor,
+        keywords: keywordsArray,
+      };
 
-    try {
       if (editingCategory) {
         const { error } = await supabase
           .from('categories')

@@ -20,6 +20,7 @@ import {
 } from '@/components/ui/table';
 import { useAuth } from '@/hooks/useAuth';
 import { useCompany } from '@/hooks/useCompany';
+import { useRequireCompany } from '@/hooks/useRequireCompany';
 import { supabase } from '@/integrations/supabase/client';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, LineChart as ReLineChart, Line, PieChart as RePieChart, Pie, Cell, Legend } from 'recharts';
 import { format, startOfMonth, endOfMonth, subMonths, startOfYear, endOfYear } from 'date-fns';
@@ -68,6 +69,7 @@ const CHART_COLORS = ['#10b981', '#3b82f6', '#f59e0b', '#8b5cf6', '#ef4444', '#0
 export default function Reports() {
   const { user } = useAuth();
   const { company } = useCompany();
+  const { companyId, isReady } = useRequireCompany();
   const [transactions, setTransactions] = useState<Transaction[]>([]);
   const [loading, setLoading] = useState(true);
   const [selectedYear, setSelectedYear] = useState(new Date().getFullYear().toString());
@@ -78,13 +80,13 @@ export default function Reports() {
   const [comparisonData, setComparisonData] = useState<any[]>([]);
 
   useEffect(() => {
-    if (user && company) {
+    if (isReady && companyId) {
       fetchTransactions();
     }
-  }, [user, company, selectedYear, selectedMonth]);
+  }, [isReady, companyId, selectedYear, selectedMonth]);
 
   const fetchTransactions = async () => {
-    if (!company) return;
+    if (!companyId) return;
     
     setLoading(true);
     try {
@@ -100,7 +102,7 @@ export default function Reports() {
             color
           )
         `)
-        .eq('company_id', company.id)
+        .eq('company_id', companyId)
         .gte('date', format(yearStart, 'yyyy-MM-dd'))
         .lte('date', format(yearEnd, 'yyyy-MM-dd'))
         .order('date', { ascending: true });

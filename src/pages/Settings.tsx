@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/hooks/useAuth';
 import { useCompany } from '@/hooks/useCompany';
+import { useRequireCompany } from '@/hooks/useRequireCompany';
 import { useToast } from '@/hooks/use-toast';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -118,6 +119,7 @@ const roleLabels: Record<string, string> = {
 export default function Settings() {
   const { user } = useAuth();
   const { company, userRole, loading: companyLoading, isAdmin, canEdit } = useCompany();
+  const { companyId, isReady } = useRequireCompany();
   const { toast } = useToast();
   const [loading, setLoading] = useState(true);
   
@@ -151,13 +153,13 @@ export default function Settings() {
   const [newUserRole, setNewUserRole] = useState<'admin' | 'financeiro' | 'leitura'>('leitura');
 
   useEffect(() => {
-    if (user && company) {
+    if (isReady && companyId) {
       fetchData();
     }
-  }, [user, company]);
+  }, [isReady, companyId]);
 
   const fetchData = async () => {
-    if (!company) return;
+    if (!companyId) return;
     
     setLoading(true);
     try {
@@ -176,7 +178,7 @@ export default function Settings() {
       const { data: compData, error: compError } = await supabase
         .from('companies')
         .select('*')
-        .eq('id', company.id)
+        .eq('id', companyId)
         .single();
 
       if (compError) throw compError;
@@ -186,7 +188,7 @@ export default function Settings() {
       const { data: subData, error: subError } = await supabase
         .from('subscriptions')
         .select('*')
-        .eq('company_id', company.id)
+        .eq('company_id', companyId)
         .single();
 
       if (!subError && subData) {
@@ -198,7 +200,7 @@ export default function Settings() {
         const { data: usersData, error: usersError } = await supabase
           .from('user_roles')
           .select('user_id, role')
-          .eq('company_id', company.id);
+          .eq('company_id', companyId);
 
         if (!usersError && usersData) {
           // Fetch profiles for these users
@@ -222,7 +224,7 @@ export default function Settings() {
         .from('user_settings')
         .select('*')
         .eq('user_id', user?.id)
-        .eq('company_id', company.id)
+        .eq('company_id', companyId)
         .maybeSingle();
 
       if (settingsError) throw settingsError;
@@ -234,7 +236,7 @@ export default function Settings() {
       const { data: connectionsData, error: connectionsError } = await supabase
         .from('api_connections')
         .select('*')
-        .eq('company_id', company.id)
+        .eq('company_id', companyId)
         .order('platform');
 
       if (connectionsError) throw connectionsError;
@@ -344,7 +346,7 @@ export default function Settings() {
         .from('user_roles')
         .update({ role: newRole })
         .eq('user_id', userId)
-        .eq('company_id', company.id);
+        .eq('company_id', companyId!);
 
       if (error) throw error;
       
@@ -363,7 +365,7 @@ export default function Settings() {
   };
 
   const handleRemoveUser = async (userId: string) => {
-    if (!confirm('Tem certeza que deseja remover este usuário da empresa?') || !isAdmin || !company) return;
+    if (!confirm('Tem certeza que deseja remover este usuário da empresa?') || !isAdmin || !companyId) return;
     if (userId === user?.id) {
       toast({
         title: 'Erro',
@@ -378,7 +380,7 @@ export default function Settings() {
         .from('user_roles')
         .delete()
         .eq('user_id', userId)
-        .eq('company_id', company.id);
+        .eq('company_id', companyId!);
 
       if (error) throw error;
       
@@ -398,12 +400,12 @@ export default function Settings() {
 
   // Settings management
   const handleSaveSettings = async () => {
-    if (!canEdit || !company) return;
+    if (!canEdit || !companyId) return;
 
     try {
       const settingsData = {
         user_id: user?.id,
-        company_id: company.id,
+        company_id: companyId,
         monthly_revenue_goal: settings.monthly_revenue_goal,
         max_expense_goal: settings.max_expense_goal,
         sync_frequency: settings.sync_frequency,
@@ -448,12 +450,12 @@ export default function Settings() {
 
   const handleSaveApiConnection = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!canEdit || !company) return;
+    if (!canEdit || !companyId) return;
 
     try {
       const connectionData = {
         user_id: user?.id,
-        company_id: company.id,
+        company_id: companyId,
         platform: formPlatform,
         api_key: formApiKey,
         api_secret: formApiSecret,

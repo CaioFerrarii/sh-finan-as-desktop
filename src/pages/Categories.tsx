@@ -64,6 +64,7 @@ export default function Categories() {
         .from('categories')
         .select('*')
         .eq('company_id', companyId)
+        .is('deleted_at', null)
         .order('name');
 
       if (error) throw error;
@@ -155,7 +156,7 @@ export default function Categories() {
     try {
       const { error } = await supabase
         .from('categories')
-        .delete()
+        .update({ deleted_at: new Date().toISOString() } as any)
         .eq('id', id);
 
       if (error) throw error;

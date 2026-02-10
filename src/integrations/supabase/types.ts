@@ -18,6 +18,7 @@ export type Database = {
         Row: {
           company_id: string | null
           created_at: string
+          deleted_at: string | null
           id: string
           message: string
           metadata: Json | null
@@ -28,6 +29,7 @@ export type Database = {
         Insert: {
           company_id?: string | null
           created_at?: string
+          deleted_at?: string | null
           id?: string
           message: string
           metadata?: Json | null
@@ -38,6 +40,7 @@ export type Database = {
         Update: {
           company_id?: string | null
           created_at?: string
+          deleted_at?: string | null
           id?: string
           message?: string
           metadata?: Json | null
@@ -219,6 +222,7 @@ export type Database = {
           color: string
           company_id: string | null
           created_at: string
+          deleted_at: string | null
           icon: string | null
           id: string
           keywords: string[] | null
@@ -230,6 +234,7 @@ export type Database = {
           color?: string
           company_id?: string | null
           created_at?: string
+          deleted_at?: string | null
           icon?: string | null
           id?: string
           keywords?: string[] | null
@@ -241,6 +246,7 @@ export type Database = {
           color?: string
           company_id?: string | null
           created_at?: string
+          deleted_at?: string | null
           icon?: string | null
           id?: string
           keywords?: string[] | null
@@ -547,6 +553,7 @@ export type Database = {
           company_id: string | null
           created_at: string
           date: string
+          deleted_at: string | null
           description: string
           id: string
           notes: string | null
@@ -566,6 +573,7 @@ export type Database = {
           company_id?: string | null
           created_at?: string
           date?: string
+          deleted_at?: string | null
           description: string
           id?: string
           notes?: string | null
@@ -585,6 +593,7 @@ export type Database = {
           company_id?: string | null
           created_at?: string
           date?: string
+          deleted_at?: string | null
           description?: string
           id?: string
           notes?: string | null

@@ -90,6 +90,7 @@ export default function Dashboard() {
           )
         `)
         .eq('company_id', companyId)
+        .is('deleted_at', null)
         .order('date', { ascending: false })
         .limit(5);
 
@@ -118,6 +119,7 @@ export default function Dashboard() {
         .from('transactions')
         .select('amount, type')
         .eq('company_id', companyId)
+        .is('deleted_at', null)
         .gte('date', startOfMonth)
         .lte('date', endOfMonth);
 
@@ -153,6 +155,7 @@ export default function Dashboard() {
         .from('transactions')
         .select('amount, type, date')
         .eq('company_id', companyId)
+        .is('deleted_at', null)
         .gte('date', months[0].start)
         .lte('date', months[5].end);
 

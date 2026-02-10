@@ -182,9 +182,9 @@ export default function SystemStatus() {
         <Card>
           <CardContent className="pt-6">
             <div className="flex items-center gap-3">
-              <div className={`p-2 rounded-lg ${dbHealthy ? 'bg-emerald-500/10' : 'bg-destructive/10'}`}>
+              <div className={`p-2 rounded-lg ${dbHealthy ? 'bg-primary/10' : 'bg-destructive/10'}`}>
                 {dbHealthy ? (
-                  <CheckCircle2 className="h-5 w-5 text-emerald-500" />
+                  <CheckCircle2 className="h-5 w-5 text-primary" />
                 ) : (
                   <XCircle className="h-5 w-5 text-destructive" />
                 )}
@@ -218,8 +218,8 @@ export default function SystemStatus() {
         <Card>
           <CardContent className="pt-6">
             <div className="flex items-center gap-3">
-              <div className={`p-2 rounded-lg ${errorCount > 0 ? 'bg-destructive/10' : 'bg-emerald-500/10'}`}>
-                <AlertTriangle className={`h-5 w-5 ${errorCount > 0 ? 'text-destructive' : 'text-emerald-500'}`} />
+              <div className={`p-2 rounded-lg ${errorCount > 0 ? 'bg-destructive/10' : 'bg-primary/10'}`}>
+                <AlertTriangle className={`h-5 w-5 ${errorCount > 0 ? 'text-destructive' : 'text-primary'}`} />
               </div>
               <div>
                 <p className="text-sm text-muted-foreground">Erros Recentes</p>
@@ -232,8 +232,8 @@ export default function SystemStatus() {
         <Card>
           <CardContent className="pt-6">
             <div className="flex items-center gap-3">
-              <div className={`p-2 rounded-lg ${duplicates.length > 0 ? 'bg-amber-500/10' : 'bg-emerald-500/10'}`}>
-                <Copy className={`h-5 w-5 ${duplicates.length > 0 ? 'text-amber-500' : 'text-emerald-500'}`} />
+              <div className={`p-2 rounded-lg ${duplicates.length > 0 ? 'bg-accent/50' : 'bg-primary/10'}`}>
+                <Copy className={`h-5 w-5 ${duplicates.length > 0 ? 'text-accent-foreground' : 'text-primary'}`} />
               </div>
               <div>
                 <p className="text-sm text-muted-foreground">Duplicatas</p>

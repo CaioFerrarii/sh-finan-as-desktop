@@ -139,6 +139,7 @@ export default function Export() {
         )
       `)
       .eq('company_id', companyId)
+      .is('deleted_at', null)
       .gte('date', startDate.toISOString().split('T')[0])
       .lte('date', endDate.toISOString().split('T')[0])
       .order('date', { ascending: false });

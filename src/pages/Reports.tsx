@@ -103,6 +103,7 @@ export default function Reports() {
           )
         `)
         .eq('company_id', companyId)
+        .is('deleted_at', null)
         .gte('date', format(yearStart, 'yyyy-MM-dd'))
         .lte('date', format(yearEnd, 'yyyy-MM-dd'))
         .order('date', { ascending: true });

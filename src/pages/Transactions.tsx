@@ -143,11 +143,13 @@ export default function Transactions() {
             )
           `)
           .eq('company_id', companyId)
+          .is('deleted_at', null)
           .order('date', { ascending: false }),
         supabase
           .from('categories')
           .select('*')
           .eq('company_id', companyId)
+          .is('deleted_at', null)
           .order('name'),
       ]);
 
@@ -294,7 +296,7 @@ export default function Transactions() {
     try {
       const { error } = await supabase
         .from('transactions')
-        .delete()
+        .update({ deleted_at: new Date().toISOString() } as any)
         .eq('id', id);
 
       if (error) throw error;

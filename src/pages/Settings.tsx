@@ -541,8 +541,8 @@ export default function Settings() {
 
     try {
       const [transactionsRes, categoriesRes, settingsRes] = await Promise.all([
-        supabase.from('transactions').select('*').eq('company_id', company.id),
-        supabase.from('categories').select('*').eq('company_id', company.id),
+        supabase.from('transactions').select('*').eq('company_id', company.id).is('deleted_at', null),
+        supabase.from('categories').select('*').eq('company_id', company.id).is('deleted_at', null),
         supabase.from('user_settings').select('*').eq('company_id', company.id),
       ]);
 

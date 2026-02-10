@@ -68,16 +68,18 @@ export default function Auth() {
   const [companyPhone, setCompanyPhone] = useState('');
   const [address, setAddress] = useState('');
   
-  const { signIn, signUp, user } = useAuth();
-  const { createCompany, company } = useCompany();
+  const { signIn, signUp, user, loading: authLoading } = useAuth();
+  const { createCompany, company, loading: companyLoading } = useCompany();
   const navigate = useNavigate();
   const { toast } = useToast();
 
+  // Redirect to dashboard only when BOTH user AND company are fully loaded
   useEffect(() => {
+    if (authLoading || companyLoading) return; // Wait for loading
     if (user && company) {
-      navigate('/dashboard');
+      navigate('/dashboard', { replace: true });
     }
-  }, [user, company, navigate]);
+  }, [user, company, authLoading, companyLoading, navigate]);
 
   const formatCNPJ = (value: string) => {
     const numbers = value.replace(/\D/g, '');

@@ -31,6 +31,7 @@ import {
 import { useToast } from '@/hooks/use-toast';
 import { useAuth } from '@/hooks/useAuth';
 import { useCompany } from '@/hooks/useCompany';
+import { useRequireCompany } from '@/hooks/useRequireCompany';
 import { useAlerts } from '@/hooks/useAlerts';
 import { supabase } from '@/integrations/supabase/client';
 import { format } from 'date-fns';
@@ -67,6 +68,7 @@ interface EditingCell {
 export default function Spreadsheet() {
   const { user } = useAuth();
   const { company, canEdit } = useCompany();
+  const { companyId, isReady, requireCompany } = useRequireCompany();
   const { toast } = useToast();
   const { createAlert } = useAlerts();
   
@@ -81,14 +83,14 @@ export default function Spreadsheet() {
   const [deleteId, setDeleteId] = useState<string | null>(null);
 
   useEffect(() => {
-    if (user && company) {
-      fetchData();
-      setupRealtimeSubscription();
-    }
-  }, [user, company]);
+    if (!isReady || !companyId) return;
+    
+    fetchData();
+    setupRealtimeSubscription();
+  }, [isReady, companyId]);
 
   const setupRealtimeSubscription = () => {
-    if (!company) return;
+    if (!companyId) return;
     
     const channel = supabase
       .channel('spreadsheet-transactions')
@@ -98,7 +100,7 @@ export default function Spreadsheet() {
           event: '*',
           schema: 'public',
           table: 'transactions',
-          filter: `company_id=eq.${company.id}`,
+          filter: `company_id=eq.${companyId}`,
         },
         () => {
           fetchData();
@@ -112,7 +114,7 @@ export default function Spreadsheet() {
   };
 
   const fetchData = async () => {
-    if (!company) return;
+    if (!companyId) return;
     
     try {
       const [transactionsRes, categoriesRes] = await Promise.all([
@@ -126,12 +128,12 @@ export default function Spreadsheet() {
               color
             )
           `)
-          .eq('company_id', company.id)
+          .eq('company_id', companyId)
           .order('date', { ascending: false }),
         supabase
           .from('categories')
           .select('*')
-          .eq('company_id', company.id)
+          .eq('company_id', companyId)
           .order('name'),
       ]);
 
@@ -225,14 +227,14 @@ export default function Spreadsheet() {
   };
 
   const handleAddRow = async () => {
-    if (!user || !company) return;
-
     try {
+      const { companyId: cId, userId } = requireCompany();
+
       const { data, error } = await supabase
         .from('transactions')
         .insert({
-          user_id: user.id,
-          company_id: company.id,
+          user_id: userId,
+          company_id: cId,
           description: 'Nova transação',
           amount: 0,
           type: 'expense',

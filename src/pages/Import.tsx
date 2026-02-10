@@ -21,6 +21,7 @@ import {
 import { useToast } from '@/hooks/use-toast';
 import { useAuth } from '@/hooks/useAuth';
 import { useCompany } from '@/hooks/useCompany';
+import { useRequireCompany } from '@/hooks/useRequireCompany';
 import { supabase } from '@/integrations/supabase/client';
 import { useAlerts } from '@/hooks/useAlerts';
 import ExcelJS from 'exceljs';
@@ -48,6 +49,7 @@ interface ImportHistoryItem {
 export default function Import() {
   const { user } = useAuth();
   const { company, canEdit } = useCompany();
+  const { companyId, isReady, requireCompany } = useRequireCompany();
   const { toast } = useToast();
   const { createAlert, checkDuplicates } = useAlerts();
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -68,17 +70,17 @@ export default function Import() {
   const [step, setStep] = useState<'upload' | 'mapping' | 'preview'>('upload');
 
   useEffect(() => {
-    if (user && company) {
+    if (isReady && companyId) {
       fetchHistory();
     }
-  }, [user, company]);
+  }, [isReady, companyId]);
 
   const fetchHistory = async () => {
-    if (!company) return;
+    if (!companyId) return;
     const { data } = await supabase
       .from('import_history')
       .select('*')
-      .eq('company_id', company.id)
+      .eq('company_id', companyId)
       .order('created_at', { ascending: false })
       .limit(5);
     if (data) setImportHistory(data);
@@ -229,7 +231,18 @@ export default function Import() {
   };
 
   const handleImport = async () => {
-    if (!file || !user || !company) return;
+    if (!file) return;
+    
+    let cId: string;
+    let userId: string;
+    try {
+      const ctx = requireCompany();
+      cId = ctx.companyId;
+      userId = ctx.userId;
+    } catch (err: any) {
+      toast({ title: 'Erro', description: err.message, variant: 'destructive' });
+      return;
+    }
 
     setImporting(true);
     let rowsImported = 0;
@@ -274,7 +287,7 @@ export default function Import() {
       const { data: categories } = await supabase
         .from('categories')
         .select('id, name')
-        .eq('company_id', company.id);
+        .eq('company_id', cId);
 
       const categoryMap = new Map(categories?.map(c => [c.name.toLowerCase(), c.id]) || []);
 
@@ -297,8 +310,8 @@ export default function Import() {
               const { data: newCategory, error: catError } = await supabase
                 .from('categories')
                 .insert({
-                  user_id: user.id,
-                  company_id: company.id,
+                  user_id: userId,
+                  company_id: cId,
                   name: categoryName,
                   color: '#' + Math.floor(Math.random()*16777215).toString(16).padStart(6, '0'),
                 })
@@ -325,8 +338,8 @@ export default function Import() {
           }
 
           const transactionData = {
-            user_id: user.id,
-            company_id: company.id,
+            user_id: userId,
+            company_id: cId,
             description,
             amount,
             type,
@@ -353,8 +366,8 @@ export default function Import() {
       await supabase
         .from('import_history')
         .insert({
-          user_id: user.id,
-          company_id: company.id,
+          user_id: userId,
+          company_id: cId,
           file_name: file.name,
           rows_imported: rowsImported,
           rows_failed: rowsFailed,

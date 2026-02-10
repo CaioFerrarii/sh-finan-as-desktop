@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/hooks/useAuth';
 import { useCompany } from '@/hooks/useCompany';
+import { useRequireCompany } from '@/hooks/useRequireCompany';
 import { useToast } from '@/hooks/use-toast';
 import { useAlerts } from '@/hooks/useAlerts';
 import { Button } from '@/components/ui/button';
@@ -65,6 +66,7 @@ type ExportType = 'transactions' | 'monthly_summary' | 'category_summary' | 'ful
 export default function Export() {
   const { user } = useAuth();
   const { company } = useCompany();
+  const { companyId, isReady } = useRequireCompany();
   const { toast } = useToast();
   const { createAlert } = useAlerts();
   const [loading, setLoading] = useState(false);
@@ -77,19 +79,19 @@ export default function Export() {
   const [exportType, setExportType] = useState<ExportType>('transactions');
 
   useEffect(() => {
-    if (user && company) {
+    if (isReady && companyId) {
       fetchExportHistory();
     }
-  }, [user, company]);
+  }, [isReady, companyId]);
 
   const fetchExportHistory = async () => {
-    if (!company) return;
+    if (!companyId) return;
     
     try {
       const { data, error } = await supabase
         .from('export_history')
         .select('*')
-        .eq('company_id', company.id)
+        .eq('company_id', companyId)
         .order('created_at', { ascending: false })
         .limit(5);
 
@@ -125,7 +127,7 @@ export default function Export() {
   };
 
   const fetchTransactions = async (startDate: Date, endDate: Date): Promise<Transaction[]> => {
-    if (!company) return [];
+    if (!companyId) return [];
     
     const { data, error } = await supabase
       .from('transactions')
@@ -136,7 +138,7 @@ export default function Export() {
           color
         )
       `)
-      .eq('company_id', company.id)
+      .eq('company_id', companyId)
       .gte('date', startDate.toISOString().split('T')[0])
       .lte('date', endDate.toISOString().split('T')[0])
       .order('date', { ascending: false });
@@ -270,7 +272,7 @@ export default function Export() {
   };
 
   const handleExport = async () => {
-    if (!company) return;
+    if (!companyId) return;
     
     setLoading(true);
     try {
@@ -315,7 +317,7 @@ export default function Export() {
 
       await supabase.from('export_history').insert({
         user_id: user?.id,
-        company_id: company.id,
+        company_id: companyId,
         file_name: `${fileName}.${exportFormat}`,
         format: exportFormat,
         export_type: exportType,

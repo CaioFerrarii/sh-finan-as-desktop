@@ -2,6 +2,7 @@ import { useCallback } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/hooks/useAuth';
 import { useCompany } from '@/hooks/useCompany';
+import { useRequireCompany } from '@/hooks/useRequireCompany';
 
 export type AlertType = 
   | 'transaction_created'
@@ -31,20 +32,21 @@ interface AlertMetadata {
 export function useAlerts() {
   const { user } = useAuth();
   const { company } = useCompany();
+  const { companyId, userId } = useRequireCompany();
 
   const createAlert = useCallback(async (
     type: AlertType,
     message: string,
     metadata: AlertMetadata = {}
   ) => {
-    if (!user?.id) return;
+    if (!userId) return;
 
     try {
       const { error } = await supabase
         .from('alerts')
         .insert({
-          user_id: user.id,
-          company_id: company?.id || null,
+          user_id: userId,
+          company_id: companyId || null,
           type,
           message,
           metadata,
@@ -56,7 +58,7 @@ export function useAlerts() {
     } catch (error) {
       console.error('Error creating alert:', error);
     }
-  }, [user?.id, company?.id]);
+  }, [userId, companyId]);
 
   const checkDuplicates = useCallback(async (
     categoryId: string | null,
@@ -64,7 +66,7 @@ export function useAlerts() {
     date: string,
     currentTransactionId?: string
   ): Promise<{ isDuplicate: boolean; duplicateId?: string }> => {
-    if (!user?.id || !company?.id) return { isDuplicate: false };
+    if (!userId || !companyId) return { isDuplicate: false };
 
     try {
       // Check for transactions with same category, amount, and within the same week
@@ -77,7 +79,7 @@ export function useAlerts() {
       let query = supabase
         .from('transactions')
         .select('id')
-        .eq('company_id', company.id)
+        .eq('company_id', companyId)
         .eq('amount', amount)
         .gte('date', weekStart.toISOString().split('T')[0])
         .lte('date', weekEnd.toISOString().split('T')[0]);
@@ -106,7 +108,7 @@ export function useAlerts() {
       console.error('Error checking duplicates:', error);
       return { isDuplicate: false };
     }
-  }, [user?.id, company?.id]);
+  }, [userId, companyId]);
 
   return {
     createAlert,

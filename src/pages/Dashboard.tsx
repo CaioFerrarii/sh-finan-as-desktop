@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/hooks/useAuth';
 import { useCompany } from '@/hooks/useCompany';
+import { useRequireCompany } from '@/hooks/useRequireCompany';
 import { StatCard } from '@/components/dashboard/StatCard';
 import { RecentTransactions } from '@/components/dashboard/RecentTransactions';
 import { MonthlyChart } from '@/components/dashboard/MonthlyChart';
@@ -32,6 +33,7 @@ interface DashboardStats {
 export default function Dashboard() {
   const { user } = useAuth();
   const { company, canEdit } = useCompany();
+  const { companyId, isReady } = useRequireCompany();
   const [transactions, setTransactions] = useState<Transaction[]>([]);
   const [stats, setStats] = useState<DashboardStats>({
     totalIncome: 0,
@@ -43,34 +45,34 @@ export default function Dashboard() {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    if (user && company) {
-      fetchDashboardData();
+    if (!isReady || !companyId) return;
+    
+    fetchDashboardData();
 
-      // Set up realtime subscription
-      const channel = supabase
-        .channel('dashboard-transactions')
-        .on(
-          'postgres_changes',
-          {
-            event: '*',
-            schema: 'public',
-            table: 'transactions',
-            filter: `company_id=eq.${company.id}`,
-          },
-          () => {
-            fetchDashboardData();
-          }
-        )
-        .subscribe();
+    // Set up realtime subscription
+    const channel = supabase
+      .channel('dashboard-transactions')
+      .on(
+        'postgres_changes',
+        {
+          event: '*',
+          schema: 'public',
+          table: 'transactions',
+          filter: `company_id=eq.${companyId}`,
+        },
+        () => {
+          fetchDashboardData();
+        }
+      )
+      .subscribe();
 
-      return () => {
-        supabase.removeChannel(channel);
-      };
-    }
-  }, [user, company]);
+    return () => {
+      supabase.removeChannel(channel);
+    };
+  }, [isReady, companyId]);
 
   const fetchDashboardData = async () => {
-    if (!company) return;
+    if (!companyId) return;
     
     try {
       // Fetch recent transactions with categories
@@ -87,7 +89,7 @@ export default function Dashboard() {
             color
           )
         `)
-        .eq('company_id', company.id)
+        .eq('company_id', companyId)
         .order('date', { ascending: false })
         .limit(5);
 
@@ -115,7 +117,7 @@ export default function Dashboard() {
       const { data: monthlyData, error: monthlyError } = await supabase
         .from('transactions')
         .select('amount, type')
-        .eq('company_id', company.id)
+        .eq('company_id', companyId)
         .gte('date', startOfMonth)
         .lte('date', endOfMonth);
 
@@ -150,7 +152,7 @@ export default function Dashboard() {
       const { data: allTransactions, error: allError } = await supabase
         .from('transactions')
         .select('amount, type, date')
-        .eq('company_id', company.id)
+        .eq('company_id', companyId)
         .gte('date', months[0].start)
         .lte('date', months[5].end);
 

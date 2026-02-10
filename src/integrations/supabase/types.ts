@@ -170,6 +170,50 @@ export type Database = {
         }
         Relationships: []
       }
+      backup_history: {
+        Row: {
+          backup_type: string
+          company_id: string
+          completed_at: string | null
+          error_message: string | null
+          id: string
+          row_counts: Json | null
+          started_at: string
+          status: string
+          tables_backed_up: string[]
+        }
+        Insert: {
+          backup_type?: string
+          company_id: string
+          completed_at?: string | null
+          error_message?: string | null
+          id?: string
+          row_counts?: Json | null
+          started_at?: string
+          status?: string
+          tables_backed_up?: string[]
+        }
+        Update: {
+          backup_type?: string
+          company_id?: string
+          completed_at?: string | null
+          error_message?: string | null
+          id?: string
+          row_counts?: Json | null
+          started_at?: string
+          status?: string
+          tables_backed_up?: string[]
+        }
+        Relationships: [
+          {
+            foreignKeyName: "backup_history_company_id_fkey"
+            columns: ["company_id"]
+            isOneToOne: false
+            referencedRelation: "companies"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       categories: {
         Row: {
           color: string
@@ -412,6 +456,44 @@ export type Database = {
             foreignKeyName: "subscriptions_company_id_fkey"
             columns: ["company_id"]
             isOneToOne: true
+            referencedRelation: "companies"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      system_logs: {
+        Row: {
+          company_id: string | null
+          created_at: string
+          endpoint: string | null
+          id: string
+          message: string
+          metadata: Json | null
+          type: string
+        }
+        Insert: {
+          company_id?: string | null
+          created_at?: string
+          endpoint?: string | null
+          id?: string
+          message: string
+          metadata?: Json | null
+          type?: string
+        }
+        Update: {
+          company_id?: string | null
+          created_at?: string
+          endpoint?: string | null
+          id?: string
+          message?: string
+          metadata?: Json | null
+          type?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "system_logs_company_id_fkey"
+            columns: ["company_id"]
+            isOneToOne: false
             referencedRelation: "companies"
             referencedColumns: ["id"]
           },
@@ -704,6 +786,17 @@ export type Database = {
           profile_full_name?: string
         }
         Returns: string
+      }
+      check_duplicate_transactions: {
+        Args: { p_company_id: string }
+        Returns: {
+          amount: number
+          date: string
+          description: string
+          duplicate_of: string
+          similarity_score: number
+          transaction_id: string
+        }[]
       }
       decrypt_api_credential: {
         Args: { p_ciphertext: string; p_user_id: string }

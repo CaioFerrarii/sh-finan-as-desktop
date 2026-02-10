@@ -18,6 +18,7 @@ import Export from "./pages/Export";
 import Settings from "./pages/Settings";
 import Spreadsheet from "./pages/Spreadsheet";
 import Alerts from "./pages/Alerts";
+import SystemStatus from "./pages/SystemStatus";
 import NotFound from "./pages/NotFound";
 import ResetPassword from "./pages/ResetPassword";
 
@@ -47,6 +48,7 @@ const App = () => (
                   <Route path="/export" element={<Export />} />
                   <Route path="/spreadsheet" element={<Spreadsheet />} />
                   <Route path="/alerts" element={<Alerts />} />
+                  <Route path="/system-status" element={<SystemStatus />} />
                   <Route path="/settings" element={<Settings />} />
                 </Route>
               </Route>

@@ -5,6 +5,8 @@ import { useCompany } from '@/hooks/useCompany';
 import { useRequireCompany } from '@/hooks/useRequireCompany';
 import { useAudit } from '@/hooks/useAudit';
 import { useToast } from '@/hooks/use-toast';
+import { validateTransactionData } from '@/lib/dataValidators';
+import { logSystemEvent } from '@/lib/systemEvents';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -199,7 +201,7 @@ export default function Transactions() {
     try {
       const { companyId: cId, userId } = requireCompany();
     
-      const transactionData = {
+      const rawData = {
         user_id: userId,
         company_id: cId,
         description: formDescription,
@@ -211,10 +213,13 @@ export default function Transactions() {
         notes: formNotes || null,
       };
 
+      // Validate data before sending
+      const transactionData = validateTransactionData(rawData);
+
       if (editingTransaction) {
         const { error } = await supabase
           .from('transactions')
-          .update(transactionData)
+          .update(transactionData as any)
           .eq('id', editingTransaction.id);
 
         if (error) throw error;
@@ -234,7 +239,7 @@ export default function Transactions() {
       } else {
         const { data, error } = await supabase
           .from('transactions')
-          .insert([transactionData])
+          .insert([transactionData as any])
           .select()
           .single();
 
@@ -258,9 +263,15 @@ export default function Transactions() {
       fetchData();
     } catch (error: any) {
       console.error('Error saving transaction:', error);
+      const message = error?.issues?.[0]?.message || error.message || 'Não foi possível salvar a transação.';
+      await logSystemEvent({
+        event_type: 'validation_error',
+        description: `Erro ao salvar transação: ${message}`,
+        metadata: { formDescription, formAmount, formType },
+      });
       toast({
         title: 'Erro',
-        description: error.message || 'Não foi possível salvar a transação.',
+        description: message,
         variant: 'destructive',
       });
     }

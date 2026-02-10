@@ -1,6 +1,7 @@
-import { useState, useEffect, createContext, useContext, ReactNode } from 'react';
+import { useState, useEffect, createContext, useContext, ReactNode, useCallback } from 'react';
 import { User, Session } from '@supabase/supabase-js';
 import { supabase } from '@/integrations/supabase/client';
+import { useQueryClient } from '@tanstack/react-query';
 
 interface AuthContextType {
   user: User | null;
@@ -18,31 +19,70 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<User | null>(null);
   const [session, setSession] = useState<Session | null>(null);
   const [loading, setLoading] = useState(true);
+  const queryClient = useQueryClient();
+
+  // Limpa completamente o estado da sessão
+  const clearSessionState = useCallback(() => {
+    // Limpar todo o cache do React Query
+    queryClient.clear();
+    // Limpar localStorage de dados temporários (preservar tokens de auth)
+    localStorage.removeItem('pending_company_bootstrap_v1');
+    // Reset state
+    setUser(null);
+    setSession(null);
+  }, [queryClient]);
 
   useEffect(() => {
+    let previousUserId: string | null = null;
+
     // Set up auth state listener FIRST
     const { data: { subscription } } = supabase.auth.onAuthStateChange(
-      (event, session) => {
-        setSession(session);
-        setUser(session?.user ?? null);
+      async (event, newSession) => {
+        const newUserId = newSession?.user?.id ?? null;
+
+        // Detectar troca de usuário — limpar tudo
+        if (previousUserId && newUserId && previousUserId !== newUserId) {
+          clearSessionState();
+        }
+
+        setSession(newSession);
+        setUser(newSession?.user ?? null);
         setLoading(false);
+        previousUserId = newUserId;
+
+        // Registrar eventos de auth no audit_log (server-side via RPC)
+        if (event === 'SIGNED_IN' && newSession?.user) {
+          // Defer para não bloquear o auth state change
+          setTimeout(async () => {
+            try {
+              await supabase.rpc('log_auth_event' as any, {
+                p_action: 'login',
+                p_metadata: { email: newSession.user.email, timestamp: new Date().toISOString() },
+              });
+            } catch {
+              /* silent - audit is best-effort */
+            }
+          }, 0);
+        }
+
+        if (event === 'SIGNED_OUT') {
+          clearSessionState();
+        }
       }
     );
 
     // THEN check for existing session
-    supabase.auth.getSession().then(({ data: { session } }) => {
-      setSession(session);
-      setUser(session?.user ?? null);
+    supabase.auth.getSession().then(({ data: { session: existingSession } }) => {
+      setSession(existingSession);
+      setUser(existingSession?.user ?? null);
+      previousUserId = existingSession?.user?.id ?? null;
       setLoading(false);
     });
 
     return () => subscription.unsubscribe();
-  }, []);
+  }, [clearSessionState]);
 
   const isAuthorizedEmail = async (email: string): Promise<boolean> => {
-    // Acesso liberado para todos os emails por enquanto.
-    // Mantemos esta função para reativar a lista de emails autorizados no futuro,
-    // sem precisar refatorar a camada de autenticação.
     void email;
     return true;
   };
@@ -72,9 +112,18 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   };
 
   const signOut = async () => {
+    // Registrar logout antes de limpar sessão
+    try {
+      await supabase.rpc('log_auth_event' as any, {
+        p_action: 'logout',
+        p_metadata: { timestamp: new Date().toISOString() },
+      });
+    } catch {
+      /* silent - audit is best-effort */
+    }
+
     await supabase.auth.signOut();
-    setUser(null);
-    setSession(null);
+    clearSessionState();
   };
 
   return (

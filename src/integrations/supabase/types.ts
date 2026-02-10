@@ -734,6 +734,14 @@ export type Database = {
         }
         Returns: string
       }
+      log_auth_event: {
+        Args: { p_action: string; p_metadata?: Json }
+        Returns: string
+      }
+      validate_user_company_access: {
+        Args: { p_company_id: string }
+        Returns: boolean
+      }
     }
     Enums: {
       app_role: "admin" | "financeiro" | "leitura"

@@ -14,6 +14,7 @@ import {
   Download,
   Table,
   Bell,
+  Activity,
 } from 'lucide-react';
 
 const navigation = [
@@ -25,6 +26,7 @@ const navigation = [
   { name: 'Importar', href: '/import', icon: Upload },
   { name: 'Exportar', href: '/export', icon: Download },
   { name: 'Alertas', href: '/alerts', icon: Bell },
+  { name: 'Status do Sistema', href: '/system-status', icon: Activity },
   { name: 'Configurações', href: '/settings', icon: Settings },
 ];
 

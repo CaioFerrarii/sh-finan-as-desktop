@@ -1,6 +1,7 @@
-import { useState, useEffect, createContext, useContext, ReactNode } from 'react';
+import { useState, useEffect, createContext, useContext, ReactNode, useCallback } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/hooks/useAuth';
+import { useQueryClient } from '@tanstack/react-query';
 
 const PENDING_COMPANY_BOOTSTRAP_KEY = 'pending_company_bootstrap_v1';
 
@@ -68,6 +69,7 @@ const CompanyContext = createContext<CompanyContextType | undefined>(undefined);
 
 export function CompanyProvider({ children }: { children: ReactNode }) {
   const { user } = useAuth();
+  const queryClient = useQueryClient();
   const [company, setCompany] = useState<Company | null>(null);
   const [userRole, setUserRole] = useState<UserRole | null>(null);
   const [subscription, setSubscription] = useState<Subscription | null>(null);
@@ -79,13 +81,22 @@ export function CompanyProvider({ children }: { children: ReactNode }) {
   const canEdit = isAdmin || isFinanceiro;
   const isSubscriptionActive = subscription?.status === 'ativo';
 
+  // Limpa todo o estado de empresa e invalida queries
+  const resetCompanyState = useCallback(() => {
+    setCompany(null);
+    setUserRole(null);
+    setSubscription(null);
+    setError(null);
+    // Invalidar todas as queries que dependem de company_id
+    queryClient.invalidateQueries();
+  }, [queryClient]);
+
   useEffect(() => {
     if (user) {
       fetchCompanyData();
     } else {
-      setCompany(null);
-      setUserRole(null);
-      setSubscription(null);
+      // Usuário deslogou — reset completo
+      resetCompanyState();
       setLoading(false);
     }
   }, [user]);
@@ -138,7 +149,6 @@ export function CompanyProvider({ children }: { children: ReactNode }) {
       if (roleError) throw roleError;
 
       if (!roleData) {
-        // If we have pending subscription/company data, bootstrap automatically via RPC
         try {
           const didBootstrap = await tryBootstrapFromPending();
           if (didBootstrap) {
@@ -157,7 +167,6 @@ export function CompanyProvider({ children }: { children: ReactNode }) {
         }
 
         if (!roleData) {
-          // User doesn't have a company yet
           setCompany(null);
           setUserRole(null);
           setSubscription(null);
@@ -202,7 +211,6 @@ export function CompanyProvider({ children }: { children: ReactNode }) {
     }
 
     try {
-      // Use the unified bootstrap RPC (avoids RLS edge-cases and keeps the flow stable)
       const { data: companyId, error: rpcError } = await supabase.rpc('bootstrap_user_company', {
         company_name: data.name,
         company_document: data.document,
@@ -214,10 +222,8 @@ export function CompanyProvider({ children }: { children: ReactNode }) {
 
       if (rpcError) throw rpcError;
 
-      // Refresh data
       await fetchCompanyData();
 
-      // Fetch company to return
       const { data: companyData, error: companyError } = await supabase
         .from('companies')
         .select('*')

@@ -79,7 +79,8 @@ export function CompanyProvider({ children }: { children: ReactNode }) {
   const isAdmin = userRole?.role === 'admin';
   const isFinanceiro = userRole?.role === 'financeiro';
   const canEdit = isAdmin || isFinanceiro;
-  const isSubscriptionActive = subscription?.status === 'ativo';
+  // Billing desativado — sempre ativo em produção sem billing
+  const isSubscriptionActive = true;
 
   // Limpa todo o estado de empresa e invalida queries
   const resetCompanyState = useCallback(() => {

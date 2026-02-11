@@ -25,19 +25,17 @@ export function useRequireCompany() {
     if (!companyId) {
       throw new Error('Empresa não carregada. Aguarde o carregamento ou faça login novamente.');
     }
-    if (!isSubscriptionActive) {
-      throw new Error('Assinatura não está ativa');
-    }
+    // Billing desativado — não verificar assinatura
     if (!role) {
       throw new Error('Papel do usuário não definido');
     }
     return { companyId, userId, role };
-  }, [userId, companyId, isSubscriptionActive, role]);
+  }, [userId, companyId, role]);
 
   /**
    * Verifica se o contexto de empresa está pronto (sem lançar erro).
    */
-  const isReady = !loading && !!companyId && !!userId && isSubscriptionActive;
+  const isReady = !loading && !!companyId && !!userId;
 
   return {
     companyId,

@@ -1,25 +1,16 @@
 import { Navigate, Outlet } from 'react-router-dom';
 import { useAuth } from '@/hooks/useAuth';
 import { useCompany } from '@/hooks/useCompany';
-import { SubscriptionBlocked } from '@/components/company/SubscriptionBlocked';
 import { Loader2 } from 'lucide-react';
-import { useEffect } from 'react';
-import { logSystemEvent } from '@/lib/systemEvents';
 
+/**
+ * ProtectedRoute — billing desativado.
+ * Apenas valida: usuário autenticado + empresa vinculada.
+ * Nunca redireciona para billing/assinatura.
+ */
 export function ProtectedRoute() {
   const { user, loading: authLoading } = useAuth();
-  const { company, subscription, loading: companyLoading } = useCompany();
-
-  // Log permission denied when subscription is blocked
-  useEffect(() => {
-    if (!companyLoading && subscription && subscription.status !== 'ativo') {
-      logSystemEvent({
-        event_type: 'permission_denied',
-        description: `Acesso bloqueado: assinatura ${subscription.status}`,
-        metadata: { subscription_status: subscription.status },
-      });
-    }
-  }, [companyLoading, subscription]);
+  const { company, loading: companyLoading } = useCompany();
 
   // Show loading while auth is being checked
   if (authLoading) {
@@ -50,14 +41,9 @@ export function ProtectedRoute() {
     );
   }
 
-  // Redirect to auth if user doesn't have a company (need to subscribe)
+  // Redirect to auth if user doesn't have a company (need to register)
   if (!company) {
     return <Navigate to="/auth" replace />;
-  }
-
-  // Block access if subscription is not active
-  if (subscription && subscription.status !== 'ativo') {
-    return <SubscriptionBlocked />;
   }
 
   return <Outlet />;

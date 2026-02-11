@@ -80,6 +80,7 @@ export function useAlerts() {
         .from('transactions')
         .select('id')
         .eq('company_id', companyId)
+        .is('deleted_at', null)
         .eq('amount', amount)
         .gte('date', weekStart.toISOString().split('T')[0])
         .lte('date', weekEnd.toISOString().split('T')[0]);

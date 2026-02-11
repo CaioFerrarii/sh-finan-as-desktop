@@ -287,7 +287,8 @@ export default function Import() {
       const { data: categories } = await supabase
         .from('categories')
         .select('id, name')
-        .eq('company_id', cId);
+        .eq('company_id', cId)
+        .is('deleted_at', null);
 
       const categoryMap = new Map(categories?.map(c => [c.name.toLowerCase(), c.id]) || []);
 
